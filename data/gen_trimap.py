@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import argparse
+import os
 
 def get_args():
     parser = argparse.ArgumentParser(description='Trimap')
@@ -55,14 +56,20 @@ def erode_dilate(msk, struc="ELLIPSE", size=(10, 10)):
 
 def main():
     args = get_args()
-    f = open(args.list)
-    names = f.readlines()
+    #f = open(args.list)
+    #names = f.readlines()
+    names = os.listdir(args.mskDir)
     print("Images Count: {}".format(len(names)))
     for name in names:
-        msk_name = args.mskDir + "/" + name.strip()[:-4] + ".png"
-        print(msk_name)
-        trimap_name = args.saveDir + "/" + name.strip()[:-4] + ".png"
-        msk = cv2.imread(msk_name, 0)
+        msk_name = args.mskDir + "/" + name
+        trimap_name = args.saveDir + "/" + name
+        msk = cv2.imread(msk_name, -1)
+        if msk is None:
+            print('Load error: ', msk_name)
+            continue
+        msk = msk[:, :, -1]
+        msk[msk>0] = msk.max()
+        #print('msk.shape: ', msk.shape)
         trimap = erode_dilate(msk, size=(args.size,args.size))
 
         print("Write to {}".format(trimap_name))

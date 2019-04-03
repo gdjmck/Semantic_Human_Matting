@@ -217,11 +217,12 @@ def main():
 
         t0 = time.time()
         for i, sample_batched in enumerate(trainloader):
-
+            print('batch ', i)
             img, trimap_gt, alpha_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha']
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
 
             trimap_pre, alpha_pre = model(img)
+            print('Done forward pass')
             loss, L_alpha, L_composition, L_cross = loss_function(args, 
                                                                   img,
                                                                   trimap_pre, 

@@ -82,8 +82,11 @@ class human_matting_data(data.Dataset):
         self.data_root = root_dir
 
         self.patch_size = patch_size
+        '''
         with open(imglist) as f:
             self.imgID = f.readlines()
+        '''
+        self.imgID = os.listdir(os.path.join(root_dir, 'trimap'))
         self.num = len(self.imgID)
         print("Dataset : file number %d"% self.num)
 
@@ -93,9 +96,9 @@ class human_matting_data(data.Dataset):
     def __getitem__(self, index):
         # read files
         image, trimap, alpha = read_files(self.data_root, 
-                                          file_name={'image': self.imgID[index].strip(),
-                                                     'trimap': self.imgID[index].strip()[:-4] +'.png',
-                                                     'alpha': self.imgID[index].strip()[:-4] +'.png'})
+                                          file_name={'image': self.imgID[index].strip()[:-4]+'.jpg',
+                                                     'trimap': self.imgID[index],
+                                                     'alpha': self.imgID[index]})
         # NOTE ! ! !
         # trimap should be 3 classes : fg, bg. unsure
         trimap[trimap==0] = 0
