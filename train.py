@@ -191,8 +191,9 @@ def main():
                              drop_last=True, 
                              shuffle=True, 
                              num_workers=args.nThreads, 
-                             pin_memory=True)
+                             pin_memory=False)
 
+    print('============> Loss function ', args.train_phase)
     print("============> Set optimizer ...")
     lr = args.lr
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), \
@@ -229,16 +230,19 @@ def main():
                                                                   trimap_gt, 
                                                                   alpha_pre, 
                                                                   alpha_gt)
+            print('Loss calculated', L_cross)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            print('Optimization stepped')
 
             loss_ += loss.item()
             L_alpha_ += L_alpha.item()
             L_composition_ += L_composition.item()
             L_cross_ += L_cross.item()
 
+        print('Done iterating all training data')
         t1 = time.time()
 
         if epoch % args.save_epoch == 0:
