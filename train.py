@@ -79,6 +79,7 @@ class Train_Log():
 
         self.save_dir = os.path.join(args.saveDir, args.load)
         self.writer = SummaryWriter(self.save_dir)
+        self.step = 1
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
 
@@ -90,6 +91,12 @@ class Train_Log():
             self.logFile = open(self.save_dir + '/log.txt', 'a')
         else:
             self.logFile = open(self.save_dir + '/log.txt', 'w')
+
+    def step(self):
+        self.step += 1
+
+    def add_scalar(self, scalar_name, scalar):
+        self.writer.add_scalar(scalar_name, scalar, self.step)
             
     def save_model(self, model, epoch):
 
@@ -105,6 +112,7 @@ class Train_Log():
         torch.save({
             'epoch': epoch,
             'state_dict': model.state_dict(),
+            'step': self.step
         }, lastest_out_path)
 
         model_out_path = "{}/model_obj.pth".format(self.save_dir_model)
@@ -118,7 +126,8 @@ class Train_Log():
         ckpt = torch.load(lastest_out_path)
         start_epoch = ckpt['epoch']
         model.load_state_dict(ckpt['state_dict'])
-        print("=> loaded checkpoint '{}' (epoch {})".format(lastest_out_path, ckpt['epoch']))
+        self.step = ckpt['step']
+        print("=> loaded checkpoint '{}' (epoch {}  total step {})".format(lastest_out_path, ckpt['epoch'], self.step))
 
         return start_epoch, model    
 
@@ -207,6 +216,7 @@ def main():
 
     print("============> Start Train ! ...")
     start_epoch = 1
+    step = 1
     trainlog = Train_Log(args)
     if args.finetuning:
         start_epoch, model = trainlog.load_model(model) 
@@ -250,6 +260,12 @@ def main():
             IOU_t_ += IOU_t.item()
             IOU_alpha_ += IOU_alpha.item()
             loss_array.append(loss.item())
+
+            trainlog.add_scalar('Train - Loss t', L_cross.item())
+            trainlog.add_scalar('Train - Loss alpha', L_alpha.item())
+            trainlog.add_scalar('Train - IOU_t', IOU_t.item())
+            trainlog.add_scalar('Train - IOU_alpha', IOU_alpha.item())
+            trainlog.step()
 
         print('Done iterating all training data')
         t1 = time.time()
