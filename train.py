@@ -5,6 +5,7 @@ Author: Zhengwei Li
 Date  : 2018/12/24
 """
 
+import numpy as np
 import argparse
 import math
 import torch
@@ -14,7 +15,8 @@ from torch.utils.data import DataLoader
 import time
 import os
 from data import dataset
-from model import network
+from model import network, utils
+from tensorboardX import SummaryWriter
 import torch.nn.functional as F
 
 
@@ -76,6 +78,7 @@ class Train_Log():
         self.args = args
 
         self.save_dir = os.path.join(args.saveDir, args.load)
+        self.writer = SummaryWriter(self.save_dir)
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
 
@@ -138,6 +141,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
     criterion = nn.CrossEntropyLoss()
     L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
+    IOU_t = utils.iou_pytorch(trimap_pre[:, 1, :, :], trimap_gt[:, 1, :, :]==0)
 
     # -------------------------------------
     # prediction loss L_p
@@ -145,6 +149,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     eps = 1e-6
     # l_alpha
     L_alpha = torch.sqrt(torch.pow(alpha_pre - alpha_gt, 2.) + eps).mean()
+    IOU_alpha = utils.iou_pytorch(alpha_pre, alpha_gt)
 
     # L_composition
     fg = torch.cat((alpha_gt, alpha_gt, alpha_gt), 1) * img
@@ -160,7 +165,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     if args.train_phase == 'end_to_end':
         loss = L_p + 0.01*L_t
         
-    return loss, L_alpha, L_composition, L_t
+    return loss, L_alpha, L_composition, L_t, IOU_t, IOU_alpha
 
 
 def main():
@@ -196,7 +201,7 @@ def main():
     print('============> Loss function ', args.train_phase)
     print("============> Set optimizer ...")
     lr = args.lr
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), \
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters() if args.train_phase == 'end_to_end' else model.t_net.parameters()), \
                                    lr=lr, betas=(0.9, 0.999), 
                                    weight_decay=0.0005)    
 
@@ -213,6 +218,9 @@ def main():
         L_alpha_ = 0
         L_composition_ = 0
         L_cross_ = 0
+        loss_array = []
+        IOU_T_ = 0
+        IOU_alpha_ = 0
         if args.lrdecayType != 'keep':
             lr = set_lr(args, epoch, optimizer)
 
@@ -223,24 +231,25 @@ def main():
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
 
             trimap_pre, alpha_pre = model(img)
-            print('Done forward pass')
-            loss, L_alpha, L_composition, L_cross = loss_function(args, 
+            loss, L_alpha, L_composition, L_cross, IOU_t, IOU_alpha = loss_function(args, 
                                                                   img,
                                                                   trimap_pre, 
                                                                   trimap_gt, 
                                                                   alpha_pre, 
                                                                   alpha_gt)
-            print('Loss calculated', L_cross)
+            print('Loss calculated', L_cross.item(), IOU_t.item(), IOU_alpha.item())
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            print('Optimization stepped')
 
             loss_ += loss.item()
             L_alpha_ += L_alpha.item()
             L_composition_ += L_composition.item()
             L_cross_ += L_cross.item()
+            IOU_t_ += IOU_t.item()
+            IOU_alpha_ += IOU_alpha.item()
+            loss_array.append(loss.item())
 
         print('Done iterating all training data')
         t1 = time.time()
@@ -253,13 +262,19 @@ def main():
             L_alpha_ = L_alpha_ / (i+1)
             L_composition_ = L_composition_ / (i+1)
             L_cross_ = L_cross_ / (i+1)
+            loss_var = np.var(loss_array)
+            IOU_t_ = IOU_t_ / (i+1)
+            IOU_alpha_ = IOU_alpha_ / (i+1)
 
-            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\t" \
+            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t: {:.5f}\tIOU_alpha: {:.5f}\t" \
                      .format(epoch, args.nEpochs, 
                             lr, 
                             loss_, 
                             L_alpha_+L_composition_, 
-                            L_cross_)
+                            L_cross_,
+                            loss_var,
+                            IOU_t_,
+                            IOU_alpha_)
             print(log)
             trainlog.save_log(log)
             trainlog.save_model(model, epoch)
