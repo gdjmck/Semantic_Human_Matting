@@ -19,7 +19,7 @@ def iou_pytorch(outputs: torch.Tensor, labels: torch.Tensor):
     
     thresholded = torch.clamp(20 * (iou - 0.5), 0, 10).ceil() / 10  # This is equal to comparing with thresolds
     
-    return thresholded  # Or thresholded.mean() if you are interested in average across the batch
+    return thresholded.mean()  # Or thresholded.mean() if you are interested in average across the batch
     
     
 # Numpy version
@@ -35,5 +35,5 @@ def iou_numpy(outputs: np.array, labels: np.array):
     
     thresholded = np.ceil(np.clip(20 * (iou - 0.5), 0, 10)) / 10
     
-    return thresholded  # Or thresholded.mean()
+    return thresholded.mean()  # Or thresholded.mean()
 

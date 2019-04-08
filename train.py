@@ -5,6 +5,7 @@ Author: Zhengwei Li
 Date  : 2018/12/24
 """
 
+from tensorboardX import SummaryWriter
 import numpy as np
 import argparse
 import math
@@ -16,7 +17,6 @@ import time
 import os
 from data import dataset
 from model import network, utils
-from tensorboardX import SummaryWriter
 import torch.nn.functional as F
 
 
@@ -78,8 +78,8 @@ class Train_Log():
         self.args = args
 
         self.save_dir = os.path.join(args.saveDir, args.load)
-        self.writer = SummaryWriter(self.save_dir)
-        self.step = 1
+        self.summary = SummaryWriter(self.save_dir)
+        self.step_cnt = 1
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
 
@@ -92,12 +92,46 @@ class Train_Log():
         else:
             self.logFile = open(self.save_dir + '/log.txt', 'w')
 
-    def step(self):
-        self.step += 1
-
     def add_scalar(self, scalar_name, scalar):
-        self.writer.add_scalar(scalar_name, scalar, self.step)
-            
+        self.summary.add_scalar(scalar_name, scalar, self.step_cnt)
+        
+    def add_trimap(self, image):
+        image = image[0, :, :, :].detach().numpy().copy()
+        bg = (image[0, :, :] > image[1, :, :]) & (image[0, :, :] > image[2, :, :])
+        fg = (image[2, :, :] > image[0, :, :]) & (image[2, :, :] > image[1, :, :])
+        figure_fg = np.zeros((image.shape[1], image.shape[2]))
+        figure_unsure = np.zeros((image.shape[1], image.shape[2]))
+        figure_fg[fg] = 128
+        figure_unsure[(~bg)&(~fg)] = 128
+        self.summary.add_image('trimap-fg', figure_fg, self.step_cnt, dataformats='HW')
+        self.summary.add_image('trimap-unsure', figure_unsure, self.step_cnt, dataformats='HW')
+        
+    def add_trimap_gt(self, image):
+        image = image.detach().numpy().copy()
+        if len(image.shape) > 4:
+            print('image shape too large', image.shape)
+        if len(image.shape) == 4:
+            image = image[0, :, :, :]
+        assert image.shape[0] == 1
+        image = image[0, :, :]
+        figure_fg = image.copy()
+        figure_unsure = image.copy()
+        figure_unsure[figure_unsure!=1] = 0
+        figure_unsure[figure_unsure==1] = 128
+        figure_fg[image!=2] = 0
+        figure_fg[image==2] = 128
+        self.summary.add_image('trimap_gt_unsure', figure_unsure, self.step_cnt, dataformats='HW')
+        self.summary.add_image('trimap_gt_fg', figure_fg, self.step_cnt, dataformats='HW')
+        
+    def add_image(self, image):
+        if isinstance(image, torch.autograd.Variable):
+            image = image.data
+        image = image.cpu().numpy()
+        self.summary.add_image('origin_image', image[0, :, :, :], self.step_cnt)
+        
+    def step(self):
+        self.step_cnt += 1
+
     def save_model(self, model, epoch):
 
         # epoch_out_path = "{}/ckpt_e{}.pth".format(self.save_dir_model, epoch)
@@ -112,7 +146,7 @@ class Train_Log():
         torch.save({
             'epoch': epoch,
             'state_dict': model.state_dict(),
-            'step': self.step
+            'step': self.step_cnt
         }, lastest_out_path)
 
         model_out_path = "{}/model_obj.pth".format(self.save_dir_model)
@@ -126,8 +160,9 @@ class Train_Log():
         ckpt = torch.load(lastest_out_path)
         start_epoch = ckpt['epoch']
         model.load_state_dict(ckpt['state_dict'])
-        self.step = ckpt['step']
-        print("=> loaded checkpoint '{}' (epoch {}  total step {})".format(lastest_out_path, ckpt['epoch'], self.step))
+        #self.step = ckpt['step']
+        self.step_cnt = 1
+        print("=> loaded checkpoint '{}' (epoch {}  total step {})".format(lastest_out_path, ckpt['epoch'], self.step_cnt))
 
         return start_epoch, model    
 
@@ -149,8 +184,9 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     # L_t = criterion(trimap_pre, trimap_gt)
 
     criterion = nn.CrossEntropyLoss()
+    assert trimap_gt.shape[1] == 1
     L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
-    IOU_t = utils.iou_pytorch(trimap_pre[:, 1, :, :], trimap_gt[:, 1, :, :]==0)
+    IOU_t = utils.iou_pytorch((trimap_pre[:, 2, :, :]>trimap_pre[:, 0, :, :]) & (trimap_pre[:, 2, :, :]>trimap_pre[:, 1, :, :]), (trimap_gt[:, 0, :, :]==2))
 
     # -------------------------------------
     # prediction loss L_p
@@ -158,7 +194,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     eps = 1e-6
     # l_alpha
     L_alpha = torch.sqrt(torch.pow(alpha_pre - alpha_gt, 2.) + eps).mean()
-    IOU_alpha = utils.iou_pytorch(alpha_pre, alpha_gt)
+    IOU_alpha = utils.iou_pytorch(alpha_pre>1e-5, alpha_gt>1e-5)
 
     # L_composition
     fg = torch.cat((alpha_gt, alpha_gt, alpha_gt), 1) * img
@@ -216,7 +252,6 @@ def main():
 
     print("============> Start Train ! ...")
     start_epoch = 1
-    step = 1
     trainlog = Train_Log(args)
     if args.finetuning:
         start_epoch, model = trainlog.load_model(model) 
@@ -229,7 +264,7 @@ def main():
         L_composition_ = 0
         L_cross_ = 0
         loss_array = []
-        IOU_T_ = 0
+        IOU_t_ = 0
         IOU_alpha_ = 0
         if args.lrdecayType != 'keep':
             lr = set_lr(args, epoch, optimizer)
@@ -247,7 +282,7 @@ def main():
                                                                   trimap_gt, 
                                                                   alpha_pre, 
                                                                   alpha_gt)
-            print('Loss calculated', L_cross.item(), IOU_t.item(), IOU_alpha.item())
+            print('Loss calculated %.4f, %.4f, %.4f' %(L_cross.item(), IOU_t.item(), IOU_alpha.item()))
 
             optimizer.zero_grad()
             loss.backward()
@@ -260,11 +295,10 @@ def main():
             IOU_t_ += IOU_t.item()
             IOU_alpha_ += IOU_alpha.item()
             loss_array.append(loss.item())
-
-            trainlog.add_scalar('Train - Loss t', L_cross.item())
-            trainlog.add_scalar('Train - Loss alpha', L_alpha.item())
-            trainlog.add_scalar('Train - IOU_t', IOU_t.item())
-            trainlog.add_scalar('Train - IOU_alpha', IOU_alpha.item())
+            trainlog.add_trimap(trimap_pre)
+            trainlog.add_trimap_gt(trimap_gt)
+            trainlog.add_image(img)
+            
             trainlog.step()
 
         print('Done iterating all training data')
