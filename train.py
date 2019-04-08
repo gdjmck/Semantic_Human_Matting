@@ -96,7 +96,7 @@ class Train_Log():
         self.summary.add_scalar(scalar_name, scalar, self.step_cnt)
         
     def add_trimap(self, image):
-        image = image[0, :, :, :].detach().numpy().copy()
+        image = image[0, :, :, :].detach().cpu().numpy().copy()
         bg = (image[0, :, :] > image[1, :, :]) & (image[0, :, :] > image[2, :, :])
         fg = (image[2, :, :] > image[0, :, :]) & (image[2, :, :] > image[1, :, :])
         figure_fg = np.zeros((image.shape[1], image.shape[2]))
@@ -107,7 +107,7 @@ class Train_Log():
         self.summary.add_image('trimap-unsure', figure_unsure, self.step_cnt, dataformats='HW')
         
     def add_trimap_gt(self, image):
-        image = image.detach().numpy().copy()
+        image = image.detach().cpu().numpy().copy()
         if len(image.shape) > 4:
             print('image shape too large', image.shape)
         if len(image.shape) == 4:
@@ -160,8 +160,8 @@ class Train_Log():
         ckpt = torch.load(lastest_out_path)
         start_epoch = ckpt['epoch']
         model.load_state_dict(ckpt['state_dict'])
-        #self.step = ckpt['step']
-        self.step_cnt = 1
+        self.step_cnt = ckpt['step']
+        #self.step_cnt = 1
         print("=> loaded checkpoint '{}' (epoch {}  total step {})".format(lastest_out_path, ckpt['epoch'], self.step_cnt))
 
         return start_epoch, model    
@@ -292,12 +292,16 @@ def main():
             L_alpha_ += L_alpha.item()
             L_composition_ += L_composition.item()
             L_cross_ += L_cross.item()
+            trainlog.add_scalar('T_net_loss', loss.item())
             IOU_t_ += IOU_t.item()
+            trainlog.add_scalar('IOU_t', IOU_t.item())
             IOU_alpha_ += IOU_alpha.item()
             loss_array.append(loss.item())
-            trainlog.add_trimap(trimap_pre)
-            trainlog.add_trimap_gt(trimap_gt)
-            trainlog.add_image(img)
+
+            if i % 100 == 0:
+                trainlog.add_trimap(trimap_pre)
+                trainlog.add_trimap_gt(trimap_gt)
+                trainlog.add_image(img)
             
             trainlog.step()
 
@@ -315,6 +319,9 @@ def main():
             loss_var = np.var(loss_array)
             IOU_t_ = IOU_t_ / (i+1)
             IOU_alpha_ = IOU_alpha_ / (i+1)
+            trainlog.add_scalar('avg_t_loss', L_cross_)
+            trainlog.add_scalar('avg_t_loss_var', loss_var)
+            trainlog.add_scalar('avg_IOU_t', IOU_t_)
 
             log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t: {:.5f}\tIOU_alpha: {:.5f}\t" \
                      .format(epoch, args.nEpochs, 
