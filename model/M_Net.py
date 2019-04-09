@@ -44,9 +44,11 @@ class M_net(nn.Module):
                                        nn.ReLU())
         self.max_pooling_4 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)  
 
+        '''
         self.en_conv_bn_relu_5 = nn.Sequential(nn.Conv2d(128, 128, 3, 1, 1, bias=False),
                                        nn.BatchNorm2d(128),
                                        nn.ReLU())
+        '''
         # -----------------------------------------------------------------
         # decoder  
         # ---------------------

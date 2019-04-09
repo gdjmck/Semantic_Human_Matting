@@ -92,8 +92,15 @@ class Train_Log():
         else:
             self.logFile = open(self.save_dir + '/log.txt', 'w')
 
-    def add_scalar(self, scalar_name, scalar):
-        self.summary.add_scalar(scalar_name, scalar, self.step_cnt)
+    def add_scalar(self, scalar_name, scalar, step=None):
+        if step is None:
+            step = self.step_cnt
+        self.summary.add_scalar(scalar_name, scalar, step)
+        
+    def add_histogram(self, var_name, value, step=None):
+        if step is None:
+            step = self.step_cnt
+        self.summary.add_histogram(var_name, value, step)
         
     def add_trimap(self, image):
         image = image[0, :, :, :].detach().cpu().numpy().copy()
@@ -157,7 +164,16 @@ class Train_Log():
     def load_model(self, model):
 
         lastest_out_path = "{}/ckpt_lastest.pth".format(self.save_dir_model)
-        ckpt = torch.load(lastest_out_path)
+        if self.args.without_gpu: # 用cpu载入模型到内存
+            ckpt = torch.load(lastest_out_path, map_location='cpu')
+        else: # 模型载入到显存
+            ckpt = torch.load(lastest_out_path)
+        state_dict = ckpt['state_dict'].copy()
+        for key in ckpt['state_dict']:
+            if key not in model.state_dict():
+                print('missing key:\t', key)
+                state_dict.pop(key)
+        ckpt['state_dict'] = state_dict
         start_epoch = ckpt['epoch']
         model.load_state_dict(ckpt['state_dict'])
         self.step_cnt = ckpt['step']
@@ -171,9 +187,10 @@ class Train_Log():
         self.logFile.write(log + '\n')
 
 
-
 def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
+    criterion = nn.CrossEntropyLoss()
+    MSE = nn.MSELoss()
     # -------------------------------------
     # classification loss L_t
     # ------------------------
@@ -182,12 +199,17 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     # trimap_pre = trimap_pre.contiguous().view(-1)
     # trimap_gt = trimap_gt.view(-1)
     # L_t = criterion(trimap_pre, trimap_gt)
+    if args.train_phase != 'pre_train_m_net':
+        assert trimap_gt.shape[1] == 1
 
-    criterion = nn.CrossEntropyLoss()
-    assert trimap_gt.shape[1] == 1
-    L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
-    IOU_t = utils.iou_pytorch((trimap_pre[:, 2, :, :]>trimap_pre[:, 0, :, :]) & (trimap_pre[:, 2, :, :]>trimap_pre[:, 1, :, :]), (trimap_gt[:, 0, :, :]==2))
-
+        L2_t = MSE(F.softmax(trimap_pre, dim=1)[:, 0, :, :], (trimap_gt[:, 0, :, :]==0).type(torch.FloatTensor))
+        L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
+        IOU_t = [utils.iou_pytorch((trimap_pre[:, 0, :, :]>trimap_pre[:, 1, :, :]) & (trimap_pre[:, 0, :, :]>trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==0),
+                 utils.iou_pytorch((trimap_pre[:, 1, :, :]>=trimap_pre[:, 0, :, :]) & (trimap_pre[:, 1, :, :]>=trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==1),
+                 utils.iou_pytorch((trimap_pre[:, 2, :, :]>trimap_pre[:, 0, :, :]) & (trimap_pre[:, 2, :, :]>trimap_pre[:, 1, :, :]), trimap_gt[:, 0, :, :]==2)]
+    else: # train_phase == 'pre_train_m_net', L2_t = L_t = IOU_t = tensor(0.)
+        L2_t = L_t = torch.Tensor([0.])
+        IOU_t = [torch.Tensor([0.])]*3
     # -------------------------------------
     # prediction loss L_p
     # ------------------------
@@ -206,11 +228,13 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
     # train_phase
     if args.train_phase == 'pre_train_t_net':
-        loss = L_t
+        loss = L_t + L2_t
     if args.train_phase == 'end_to_end':
         loss = L_p + 0.01*L_t
+    if args.train_phase == 'pre_train_m_net':
+        loss = L_p
         
-    return loss, L_alpha, L_composition, L_t, IOU_t, IOU_alpha
+    return loss, L_alpha, L_composition, L_t, L2_t, IOU_t, IOU_alpha
 
 
 def main():
@@ -242,11 +266,21 @@ def main():
                              shuffle=True, 
                              num_workers=args.nThreads, 
                              pin_memory=False)
+    model.train() 
 
     print('============> Loss function ', args.train_phase)
     print("============> Set optimizer ...")
     lr = args.lr
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters() if args.train_phase == 'end_to_end' else model.t_net.parameters()), \
+    train_params = model.parameters()
+    target_network = model
+    if args.train_phase == 'pre_train_t_net':
+        train_params = model.t_net.parameters()
+        target_network = model.t_net
+    elif args.train_phase == 'pre_train_m_net':
+        train_params = model.m_net.parameters()
+        target_network = model.m_net
+        model.t_net.eval()
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, train_params), \
                                    lr=lr, betas=(0.9, 0.999), 
                                    weight_decay=0.0005)    
 
@@ -256,15 +290,14 @@ def main():
     if args.finetuning:
         start_epoch, model = trainlog.load_model(model) 
 
-    model.train() 
     for epoch in range(start_epoch, args.nEpochs+1):
 
         loss_ = 0
         L_alpha_ = 0
         L_composition_ = 0
-        L_cross_ = 0
+        L_cross_, L2_bg_ = 0, 0
         loss_array = []
-        IOU_t_ = 0
+        IOU_t_bg_, IOU_t_unsure_, IOU_t_fg_ = 0, 0, 0
         IOU_alpha_ = 0
         if args.lrdecayType != 'keep':
             lr = set_lr(args, epoch, optimizer)
@@ -275,14 +308,31 @@ def main():
             img, trimap_gt, alpha_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha']
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
 
-            trimap_pre, alpha_pre = model(img)
-            loss, L_alpha, L_composition, L_cross, IOU_t, IOU_alpha = loss_function(args, 
-                                                                  img,
-                                                                  trimap_pre, 
-                                                                  trimap_gt, 
-                                                                  alpha_pre, 
-                                                                  alpha_gt)
-            print('Loss calculated %.4f, %.4f, %.4f' %(L_cross.item(), IOU_t.item(), IOU_alpha.item()))
+            # end_to_end  or  pre_train_t_net
+            if args.train_phase != 'pre_train_m_net':
+                trimap_pre, alpha_pre = model(img)
+                loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args, 
+                                                                    img,
+                                                                    trimap_pre, 
+                                                                    trimap_gt, 
+                                                                    alpha_pre, 
+                                                                    alpha_gt)
+                print("Loss calculated %.4f\nL2: %.2f\nbg IOU: %.2f\nunsure IOU: %.2f\nfg IOU: %.2f"%(L_cross.item(), L2_cross.item(), IOU_t[0].item(), IOU_t[1].item(), IOU_t[2].item()))
+            else: # pre_train_m_net
+                trimap_softmax = torch.zeros([trimap_gt.shape[0], 3, trimap_gt.shape[2], trimap_gt.shape[3]], dtype=torch.float32)
+                trimap_softmax.scatter_(1, trimap_gt.type(torch.int64), 1)
+                #trimap_softmax = F.softmax(trimap_gt, dim=1)
+                bg_gt, fg_gt, unsure_gt = torch.split(trimap_softmax, 1, dim=1)
+                m_net_input = torch.cat((img, trimap_softmax), 1)
+                alpha_r = model.m_net(m_net_input)
+                alpha_p = fg_gt + unsure_gt * alpha_r
+                loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args,
+                                                                            img, 
+                                                                            trimap_gt,
+                                                                            trimap_gt, 
+                                                                            alpha_p,
+                                                                            alpha_gt)
+                print('loss: %.2f\tL_composision: %.2f\tL_alpha: %.2f'%(loss.item(), L_composition.item(), L_alpha.item()))
 
             optimizer.zero_grad()
             loss.backward()
@@ -292,13 +342,26 @@ def main():
             L_alpha_ += L_alpha.item()
             L_composition_ += L_composition.item()
             L_cross_ += L_cross.item()
-            trainlog.add_scalar('T_net_loss', loss.item())
-            IOU_t_ += IOU_t.item()
-            trainlog.add_scalar('IOU_t', IOU_t.item())
+            L2_bg_ += L2_cross.item()
+            IOU_t_bg_ += IOU_t[0].item()
+            IOU_t_unsure_ += IOU_t[1].item()
+            IOU_t_fg_ += IOU_t[2].item()
             IOU_alpha_ += IOU_alpha.item()
             loss_array.append(loss.item())
+            
+            # TENSORBOARD SUMMARIZE SCALARS
+            trainlog.add_scalar('T_net_loss', L_cross.item())
+            trainlog.add_scalar('T_net_bg_L2', L2_cross.item())
+            trainlog.add_scalar('IOU_t_bg', IOU_t[0].item())
+            trainlog.add_scalar('IOU_t_unsure', IOU_t[1].item())
+            trainlog.add_scalar('IOU_t_fg', IOU_t[2].item())
+            for var_name, value in target_network.named_parameters():
+                var_name = var_name.replace('.', '/')
+                trainlog.add_histogram(var_name, value.data.cpu().numpy())
+                trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
 
-            if i % 100 == 0:
+            # TENSORBOARD SUMMARIZE IMAGE
+            if i % 100 == 0 and args.train_phase != 'pre_train_m_net':
                 trainlog.add_trimap(trimap_pre)
                 trainlog.add_trimap_gt(trimap_gt)
                 trainlog.add_image(img)
@@ -316,21 +379,29 @@ def main():
             L_alpha_ = L_alpha_ / (i+1)
             L_composition_ = L_composition_ / (i+1)
             L_cross_ = L_cross_ / (i+1)
+            L2_bg_ = L2_bg_ / (i+1)
             loss_var = np.var(loss_array)
-            IOU_t_ = IOU_t_ / (i+1)
+            IOU_t_bg_ = IOU_t_bg_ / (i+1)
+            IOU_t_unsure_ = IOU_t_unsure_ / (i+1)
+            IOU_t_fg_ = IOU_t_fg_ / (i+1)
             IOU_alpha_ = IOU_alpha_ / (i+1)
-            trainlog.add_scalar('avg_t_loss', L_cross_)
-            trainlog.add_scalar('avg_t_loss_var', loss_var)
-            trainlog.add_scalar('avg_IOU_t', IOU_t_)
+            trainlog.add_scalar('avg_t_loss', L_cross_, epoch)
+            trainlog.add_scalar('avg_t_L2_bg', L2_bg_, epoch)
+            trainlog.add_scalar('avg_t_loss_var', loss_var, epoch)
+            trainlog.add_scalar('avg_IOU_t_bg', IOU_t_bg_, epoch)
+            trainlog.add_scalar('avg_IOU_t_unsure', IOU_t_unsure_, epoch)
+            trainlog.add_scalar('avg_IOU_t_fg', IOU_t_fg_, epoch)
 
-            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t: {:.5f}\tIOU_alpha: {:.5f}\t" \
+            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t_bg: {:.5f}\tIOU_t_unsure: {:.5f}\tIOU_t_fg: {:.5f}\tIOU_alpha: {:.5f}\t" \
                      .format(epoch, args.nEpochs, 
                             lr, 
                             loss_, 
                             L_alpha_+L_composition_, 
                             L_cross_,
                             loss_var,
-                            IOU_t_,
+                            IOU_t_bg_,
+                            IOU_t_unsure_,
+                            IOU_t_fg_,
                             IOU_alpha_)
             print(log)
             trainlog.save_log(log)
