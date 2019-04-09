@@ -12,6 +12,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchvision.utils as vutils
 from torch.utils.data import DataLoader
 import time
 import os
@@ -130,11 +131,13 @@ class Train_Log():
         self.summary.add_image('trimap_gt_unsure', figure_unsure, self.step_cnt, dataformats='HW')
         self.summary.add_image('trimap_gt_fg', figure_fg, self.step_cnt, dataformats='HW')
         
-    def add_image(self, image):
+    def add_image(self, tag, image):
         if isinstance(image, torch.autograd.Variable):
             image = image.data
+        if len(image.shape) == 4:
+            image = image[0, :, :, :]
         image = image.cpu().numpy()
-        self.summary.add_image('origin_image', image[0, :, :, :], self.step_cnt)
+        self.summary.add_image(tag, image, self.step_cnt)
         
     def step(self):
         self.step_cnt += 1
@@ -322,7 +325,7 @@ def main():
                 trimap_softmax = torch.zeros([trimap_gt.shape[0], 3, trimap_gt.shape[2], trimap_gt.shape[3]], dtype=torch.float32)
                 trimap_softmax.scatter_(1, trimap_gt.type(torch.int64), 1)
                 #trimap_softmax = F.softmax(trimap_gt, dim=1)
-                bg_gt, fg_gt, unsure_gt = torch.split(trimap_softmax, 1, dim=1)
+                bg_gt, unsure_gt, fg_gt = torch.split(trimap_softmax, 1, dim=1)
                 m_net_input = torch.cat((img, trimap_softmax), 1)
                 alpha_r = model.m_net(m_net_input)
                 alpha_p = fg_gt + unsure_gt * alpha_r
@@ -352,6 +355,8 @@ def main():
             # TENSORBOARD SUMMARIZE SCALARS
             trainlog.add_scalar('T_net_loss', L_cross.item())
             trainlog.add_scalar('T_net_bg_L2', L2_cross.item())
+            trainlog.add_scalar('M_net_alpha', L_alpha.item())
+            trainlog.add_scalar('M_net_composition', L_composition.item())
             trainlog.add_scalar('IOU_t_bg', IOU_t[0].item())
             trainlog.add_scalar('IOU_t_unsure', IOU_t[1].item())
             trainlog.add_scalar('IOU_t_fg', IOU_t[2].item())
@@ -361,10 +366,16 @@ def main():
                 trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
 
             # TENSORBOARD SUMMARIZE IMAGE
-            if i % 100 == 0 and args.train_phase != 'pre_train_m_net':
+            if (i+1) % 100 == 0 and args.train_phase == 'pre_train_m_net':
+                trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=True, nrow=4))
+                trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=True, nrow=4))
+                trainlog.add_image('alpha_p', vutils.make_grid(alpha_p, normalize=True, nrow=4))
+                trainlog.add_image('alpha_r', vutils.make_grid(alpha_r, normalize=True, nrow=4))
+                trainlog.add_image('alpha_gt', vutils.make_grid(alpha_gt, normalize=True, nrow=4))
+            if (i+1) % 100 == 0 and args.train_phase != 'pre_train_m_net':
                 trainlog.add_trimap(trimap_pre)
                 trainlog.add_trimap_gt(trimap_gt)
-                trainlog.add_image(img)
+                trainlog.add_image('origin_image', img)
             
             trainlog.step()
 

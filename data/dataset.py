@@ -180,7 +180,7 @@ class human_matting_data(data.Dataset):
         alpha = np2Tensor(alpha)
 
         trimap = trimap[0,:,:].unsqueeze_(0)
-        alpha = alpha[0,:,:].unsqueeze_(0)
+        alpha = alpha[-1,:,:].unsqueeze_(0)
 
         sample = {'image': image, 'trimap': trimap, 'alpha': alpha}
 
