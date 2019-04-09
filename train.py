@@ -335,7 +335,7 @@ def main():
                                                                             trimap_gt, 
                                                                             alpha_p,
                                                                             alpha_gt)
-                print('loss: %.2f\tL_composision: %.2f\tL_alpha: %.2f'%(loss.item(), L_composition.item(), L_alpha.item()))
+                print('loss: %.5f\tL_composision: %.5f\tL_alpha: %.5f'%(loss.item(), L_composition.item(), L_alpha.item()))
 
             optimizer.zero_grad()
             loss.backward()
@@ -402,6 +402,8 @@ def main():
             trainlog.add_scalar('avg_IOU_t_bg', IOU_t_bg_, epoch)
             trainlog.add_scalar('avg_IOU_t_unsure', IOU_t_unsure_, epoch)
             trainlog.add_scalar('avg_IOU_t_fg', IOU_t_fg_, epoch)
+            trainlog.add_scalar('avg_L_alpha', L_alpha_, epoch)
+            trainlog.add_scalar('avg_L_composition', L_composition_, epoch)
 
             log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t_bg: {:.5f}\tIOU_t_unsure: {:.5f}\tIOU_t_fg: {:.5f}\tIOU_alpha: {:.5f}\t" \
                      .format(epoch, args.nEpochs, 
