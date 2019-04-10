@@ -178,12 +178,12 @@ class Train_Log():
                 state_dict.pop(key)
         ckpt['state_dict'] = state_dict
         start_epoch = ckpt['epoch']
-        model.load_state_dict(ckpt['state_dict'])
+        model.load_state_dict(ckpt['state_dict'], strict=False)
         self.step_cnt = ckpt['step']
         #self.step_cnt = 1
         print("=> loaded checkpoint '{}' (epoch {}  total step {})".format(lastest_out_path, ckpt['epoch'], self.step_cnt))
 
-        return start_epoch, model    
+        return start_epoch, model
 
 
     def save_log(self, log):
@@ -193,7 +193,7 @@ class Train_Log():
 def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
     criterion = nn.CrossEntropyLoss()
-    MSE = nn.MSELoss()
+    L1 = nn.L1Loss()
     # -------------------------------------
     # classification loss L_t
     # ------------------------
@@ -205,7 +205,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     if args.train_phase != 'pre_train_m_net':
         assert trimap_gt.shape[1] == 1
 
-        L2_t = MSE(F.softmax(trimap_pre, dim=1)[:, 0, :, :], (trimap_gt[:, 0, :, :]==0).type(torch.FloatTensor))
+        L2_t = L1(F.softmax(trimap_pre, dim=1)[:, 0, :, :], (trimap_gt[:, 0, :, :]==0).type(torch.FloatTensor))
         L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
         IOU_t = [utils.iou_pytorch((trimap_pre[:, 0, :, :]>trimap_pre[:, 1, :, :]) & (trimap_pre[:, 0, :, :]>trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==0),
                  utils.iou_pytorch((trimap_pre[:, 1, :, :]>=trimap_pre[:, 0, :, :]) & (trimap_pre[:, 1, :, :]>=trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==1),
@@ -216,16 +216,15 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     # -------------------------------------
     # prediction loss L_p
     # ------------------------
-    eps = 1e-6
     # l_alpha
-    L_alpha = torch.sqrt(torch.pow(alpha_pre - alpha_gt, 2.) + eps).mean()
+    L_alpha = L1(alpha_pre, alpha_gt)
     IOU_alpha = utils.iou_pytorch(alpha_pre>1e-5, alpha_gt>1e-5)
 
     # L_composition
     fg = torch.cat((alpha_gt, alpha_gt, alpha_gt), 1) * img
     fg_pre = torch.cat((alpha_pre, alpha_pre, alpha_pre), 1) * img
 
-    L_composition = torch.sqrt(torch.pow(fg - fg_pre, 2.) + eps).mean()
+    L_composition = L1(fg_pre, fg)
 
     L_p = 0.5*L_alpha + 0.5*L_composition
 
@@ -361,18 +360,21 @@ def main():
             trainlog.add_scalar('IOU_t_unsure', IOU_t[1].item())
             trainlog.add_scalar('IOU_t_fg', IOU_t[2].item())
             for var_name, value in target_network.named_parameters():
+                # ignore unused parameters
+                if not hasattr(value.grad, 'data'):
+                    continue
                 var_name = var_name.replace('.', '/')
                 trainlog.add_histogram(var_name, value.data.cpu().numpy())
                 trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
 
             # TENSORBOARD SUMMARIZE IMAGE
-            if (i+1) % 100 == 0 and args.train_phase == 'pre_train_m_net':
+            if (i+1) % 500 == 0 and args.train_phase == 'pre_train_m_net':
                 trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=True, nrow=4))
                 trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=True, nrow=4))
                 trainlog.add_image('alpha_p', vutils.make_grid(alpha_p, normalize=True, nrow=4))
                 trainlog.add_image('alpha_r', vutils.make_grid(alpha_r, normalize=True, nrow=4))
                 trainlog.add_image('alpha_gt', vutils.make_grid(alpha_gt, normalize=True, nrow=4))
-            if (i+1) % 100 == 0 and args.train_phase != 'pre_train_m_net':
+            if (i+1) % 500 == 0 and args.train_phase != 'pre_train_m_net':
                 trainlog.add_trimap(trimap_pre)
                 trainlog.add_trimap_gt(trimap_gt)
                 trainlog.add_image('origin_image', img)

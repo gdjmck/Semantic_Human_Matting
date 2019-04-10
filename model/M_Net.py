@@ -36,7 +36,7 @@ class M_net(nn.Module):
         self.en_conv_bn_relu_3 = nn.Sequential(nn.Conv2d(32, 64, 3, 1, 1, bias=False),
                                        nn.BatchNorm2d(64),
                                        nn.ReLU())
-        self.max_pooling_3 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1) 
+        self.max_pooling_3 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         # 1/16
         self.en_conv_bn_relu_4 = nn.Sequential(nn.Conv2d(64, 128, 3, 1, 1, bias=False),
@@ -78,10 +78,13 @@ class M_net(nn.Module):
 
 
         self.conv = nn.Conv2d(16, 1, 5, 1, 2, bias=False)
+        self.conv1 = nn.Conv2d(17, 1, 5, 1, 2, bias=False)
 
 
     def forward(self, input):
 
+        unsure = input[:, -2:-1, :, :]
+        
         # ----------------
         # encoder
         # --------
@@ -109,9 +112,11 @@ class M_net(nn.Module):
 
         x = self.de_conv_bn_relu_4(x)
         x = self.deconv_4(x)
+        
+        x = torch.cat((x, unsure), 1)
 
         # raw alpha pred
-        out = self.conv(x)
+        out = self.conv1(x)
 
         return out 
 
