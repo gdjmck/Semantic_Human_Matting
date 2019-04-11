@@ -293,6 +293,7 @@ def main():
     if args.finetuning:
         start_epoch, model = trainlog.load_model(model) 
 
+    trainloader = [next(iter(trainloader))] * 200
     for epoch in range(start_epoch, args.nEpochs+1):
 
         loss_ = 0
@@ -372,7 +373,7 @@ def main():
                     trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
 
             # TENSORBOARD IMAGE
-            if (i+1) % 500 == 0 and args.train_phase == 'pre_train_m_net':
+            if (i+1) % 20 == 0 and args.train_phase == 'pre_train_m_net':
                 trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=True, nrow=4))
                 trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=True, nrow=4))
                 trainlog.add_image('alpha_p', vutils.make_grid(alpha_p, normalize=True, nrow=4))
