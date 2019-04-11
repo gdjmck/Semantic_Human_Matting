@@ -205,13 +205,13 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     if args.train_phase != 'pre_train_m_net':
         assert trimap_gt.shape[1] == 1
 
-        L2_t = L1(F.softmax(trimap_pre, dim=1)[:, 0, :, :], (trimap_gt[:, 0, :, :]==0).type(torch.FloatTensor))
+        L1_t = L1(F.softmax(trimap_pre, dim=1)[:, 0, :, :], (trimap_gt[:, 0, :, :]==0).type(torch.FloatTensor))
         L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
         IOU_t = [utils.iou_pytorch((trimap_pre[:, 0, :, :]>trimap_pre[:, 1, :, :]) & (trimap_pre[:, 0, :, :]>trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==0),
                  utils.iou_pytorch((trimap_pre[:, 1, :, :]>=trimap_pre[:, 0, :, :]) & (trimap_pre[:, 1, :, :]>=trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==1),
                  utils.iou_pytorch((trimap_pre[:, 2, :, :]>trimap_pre[:, 0, :, :]) & (trimap_pre[:, 2, :, :]>trimap_pre[:, 1, :, :]), trimap_gt[:, 0, :, :]==2)]
     else: # train_phase == 'pre_train_m_net', L2_t = L_t = IOU_t = tensor(0.)
-        L2_t = L_t = torch.Tensor([0.])
+        L1_t = L_t = torch.Tensor([0.])
         IOU_t = [torch.Tensor([0.])]*3
     # -------------------------------------
     # prediction loss L_p
@@ -226,7 +226,8 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
     L_composition = L1(fg_pre, fg)
 
-    L_p = 0.5*L_alpha + 0.5*L_composition
+    #L_p = 0.5*L_alpha + 0.5*L_composition
+    L_p = L_alpha
 
     # train_phase
     if args.train_phase == 'pre_train_t_net':
@@ -236,7 +237,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     if args.train_phase == 'pre_train_m_net':
         loss = L_p
         
-    return loss, L_alpha, L_composition, L_t, L2_t, IOU_t, IOU_alpha
+    return loss, L_alpha, L_composition, L_t, L1_t, IOU_t, IOU_alpha
 
 
 def main():
@@ -284,7 +285,7 @@ def main():
         model.t_net.eval()
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, train_params), \
                                    lr=lr, betas=(0.9, 0.999), 
-                                   weight_decay=0.0005)    
+                                   weight_decay=0.0005)
 
     print("============> Start Train ! ...")
     start_epoch = 1
@@ -351,7 +352,8 @@ def main():
             IOU_alpha_ += IOU_alpha.item()
             loss_array.append(loss.item())
             
-            # TENSORBOARD SUMMARIZE SCALARS
+            # TENSORBOARD SCALARS
+            trainlog.add_scalar('loss', loss.item())
             trainlog.add_scalar('T_net_loss', L_cross.item())
             trainlog.add_scalar('T_net_bg_L2', L2_cross.item())
             trainlog.add_scalar('M_net_alpha', L_alpha.item())
@@ -367,7 +369,7 @@ def main():
                 trainlog.add_histogram(var_name, value.data.cpu().numpy())
                 trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
 
-            # TENSORBOARD SUMMARIZE IMAGE
+            # TENSORBOARD IMAGE
             if (i+1) % 500 == 0 and args.train_phase == 'pre_train_m_net':
                 trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=True, nrow=4))
                 trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=True, nrow=4))
@@ -398,6 +400,7 @@ def main():
             IOU_t_unsure_ = IOU_t_unsure_ / (i+1)
             IOU_t_fg_ = IOU_t_fg_ / (i+1)
             IOU_alpha_ = IOU_alpha_ / (i+1)
+            trainlog.add_scalar('avg_loss', loss_, epoch)
             trainlog.add_scalar('avg_t_loss', L_cross_, epoch)
             trainlog.add_scalar('avg_t_L2_bg', L2_bg_, epoch)
             trainlog.add_scalar('avg_t_loss_var', loss_var, epoch)
