@@ -323,10 +323,11 @@ def main():
                 print("Loss calculated %.4f\nL2: %.2f\nbg IOU: %.2f\nunsure IOU: %.2f\nfg IOU: %.2f"%(L_cross.item(), L2_cross.item(), IOU_t[0].item(), IOU_t[1].item(), IOU_t[2].item()))
             else: # pre_train_m_net
                 trimap_softmax = torch.zeros([trimap_gt.shape[0], 3, trimap_gt.shape[2], trimap_gt.shape[3]], dtype=torch.float32)
-                trimap_softmax.scatter_(1, trimap_gt.type(torch.int64), 1)
+                trimap_softmax.scatter_(1, trimap_gt.long().data.cpu(), 1)
+                trimap_softmax = trimap_softmax.to(device)
                 #trimap_softmax = F.softmax(trimap_gt, dim=1)
                 bg_gt, unsure_gt, fg_gt = torch.split(trimap_softmax, 1, dim=1)
-                m_net_input = torch.cat((img, trimap_softmax), 1)
+                m_net_input = torch.cat((img, trimap_softmax), 1).to(device)
                 alpha_r = model.m_net(m_net_input)
                 alpha_p = fg_gt + unsure_gt * alpha_r
                 loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args,
@@ -361,13 +362,14 @@ def main():
             trainlog.add_scalar('IOU_t_bg', IOU_t[0].item())
             trainlog.add_scalar('IOU_t_unsure', IOU_t[1].item())
             trainlog.add_scalar('IOU_t_fg', IOU_t[2].item())
-            for var_name, value in target_network.named_parameters():
-                # ignore unused parameters
-                if not hasattr(value.grad, 'data'):
-                    continue
-                var_name = var_name.replace('.', '/')
-                trainlog.add_histogram(var_name, value.data.cpu().numpy())
-                trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
+            if (i+1) % 100 == 0:
+                for var_name, value in target_network.named_parameters():
+                    # ignore unused parameters
+                    if not hasattr(value.grad, 'data'):
+                        continue
+                    var_name = var_name.replace('.', '/')
+                    trainlog.add_histogram(var_name, value.data.cpu().numpy())
+                    trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
 
             # TENSORBOARD IMAGE
             if (i+1) % 500 == 0 and args.train_phase == 'pre_train_m_net':
