@@ -13,6 +13,20 @@ def get_args():
     print(args)
     return args
 
+def dilate(msk, struc="ELLIPSE", size=(10, 10)):
+    if struc == "RECT":
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, size)
+    elif struc == "CORSS":
+        kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, size)
+    else:
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, size)
+
+    if len(np.unique(msk)) > 2:
+        msk[msk == msk.min()] = 0
+        msk[msk != 0] = 1
+
+    return cv2.dilate(msk, kernel, iterations=1)
+
 def erode_dilate(msk, struc="ELLIPSE", size=(10, 10)):
     if struc == "RECT":
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, size)
@@ -68,12 +82,17 @@ def main():
             print('Load error: ', msk_name)
             continue
         msk = msk[:, :, -1]
-        msk[msk>0] = msk.max()
-        #print('msk.shape: ', msk.shape)
-        trimap = erode_dilate(msk, size=(args.size,args.size))
+        fg = msk[msk==255].copy()
+        bg = msk[msk==0].copy()
+        unsure = msk.copy()
+        unsure[(unsure==unsure.min()) | (unsure==unsure.max())] = 0
+        unsure[unsure!=0] = 1
+        unsure = dilate(unsure, size=(args.size, args.size))
+        msk[unsure!=0] = 128.
+        #trimap = erode_dilate(msk, size=(args.size,args.size))
 
         print("Write to {}".format(trimap_name))
-        cv2.imwrite(trimap_name, trimap)
+        cv2.imwrite(trimap_name, msk)
 
 if __name__ == "__main__":
     main()
