@@ -66,20 +66,16 @@ def random_scale_and_creat_patch(image, trimap, alpha, patch_size):
 
 
 def random_flip(image, trimap, alpha):
-
+    '''
     if r.random() < 0.5:
         image = cv2.flip(image, 0)
         trimap = cv2.flip(trimap, 0)
         alpha = cv2.flip(alpha, 0)
-        if (image is None) or (trimap is None) or (alpha is None):
-            print('upside down flip makes Null image')
-
+    '''
     if r.random() < 0.5:
         image = cv2.flip(image, 1)
         trimap = cv2.flip(trimap, 1)
         alpha = cv2.flip(alpha, 1)
-        if (image is None) or (trimap is None) or (alpha is None):
-            print('horizontal flip makes Null image')
     return image, trimap, alpha
        
 def np2Tensor(array):
@@ -149,26 +145,8 @@ class human_matting_data(data.Dataset):
 
         # augmentation
         image, trimap, alpha = random_scale_and_creat_patch(image, trimap, alpha, self.patch_size)
-        if 0 in list(image.shape):
-            print(image.shape)
-            print('Augmentation  ', self.imgID[index], ' Image is None')
-        if 0 in list(trimap.shape):
-            print(trimap.shape)
-            print('Augmentation  ', self.imgID[index], ' trimap is None')
-        if 0 in list(alpha.shape):
-            print(alpha.shape)
-            print('Augmentation  ', self.imgID[index], ' alpha is None')
         image, trimap, alpha = random_flip(image, trimap, alpha)
         trimap = np.expand_dims(trimap, -1)
-        if 0 in list(image.shape):
-            print(image.shape)
-            print('flip  ', self.imgID[index], ' Image is None')
-        if 0 in list(trimap.shape):
-            print(trimap.shape)
-            print('flip  ', self.imgID[index], ' trimap is None')
-        if 0 in list(alpha.shape):
-            print(alpha.shape)
-            print('flip  ', self.imgID[index], ' alpha is None')
 
 
         # normalize
