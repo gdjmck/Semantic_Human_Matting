@@ -245,7 +245,7 @@ def loss_octave(octave_gt, octave):
     criterion = nn.L1Loss()
     loss = 0
     for i in range(len(octave)):
-        loss += criterion(octave, octave_gt)
+        loss += criterion(octave[i], octave_gt[i])
     return loss
 
 def main():
