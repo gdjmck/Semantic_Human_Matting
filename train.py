@@ -253,7 +253,7 @@ def unsure_octave(unsure_alpha):
     half = unsure_alpha
     for i in range(4):
         half = F.upsample(half, size=(half.size(2)//2, half.size(3)//2), mode='bilinear')
-        octave.append(half>0.2)
+        octave.append((half>0.2).type(torch.FloatTensor))
     return octave
 
 
