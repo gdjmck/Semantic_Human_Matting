@@ -318,7 +318,7 @@ def main():
             print('batch ', i)
             img, trimap_gt, alpha_gt, octave_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha'], sample_batched['octave']
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
-            for j in len(octave_gt):
+            for j in range(len(octave_gt)):
                 octave_gt[j] = octave_gt[j].to(device)
 
             # end_to_end  or  pre_train_t_net
