@@ -320,7 +320,6 @@ def main():
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
             for j in range(len(octave_gt)):
                 octave_gt[j] = octave_gt[j].to(device)
-                print('octave_gt ', j, octave_gt[j].shape)
 
             # end_to_end  or  pre_train_t_net
             if args.train_phase != 'pre_train_m_net':
