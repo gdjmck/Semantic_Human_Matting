@@ -9,6 +9,7 @@ import random as r
 import numpy as np
 
 import torch
+import torch.nn as nn
 import torch.utils.data as data
 
 
