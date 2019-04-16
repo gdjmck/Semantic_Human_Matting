@@ -398,11 +398,12 @@ def main():
 
             # TENSORBOARD IMAGE
             if (i+1) % 500 == 0 and args.train_phase == 'pre_train_m_net':
-                trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=True, nrow=4))
-                trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=True, nrow=4))
-                trainlog.add_image('alpha_p', vutils.make_grid(alpha_p, normalize=True, nrow=4))
-                trainlog.add_image('alpha_r', vutils.make_grid(alpha_r, normalize=True, nrow=4))
-                trainlog.add_image('alpha_gt', vutils.make_grid(alpha_gt, normalize=True, nrow=4))
+                trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=False, nrow=4))
+                trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=False, nrow=4))
+                trainlog.add_image('alpha_p', vutils.make_grid(alpha_p, normalize=False, nrow=4))
+                trainlog.add_image('alpha_r', vutils.make_grid(alpha_r, normalize=False, nrow=4))
+                trainlog.add_image('alpha_gt', vutils.make_grid(alpha_gt, normalize=False, nrow=4))
+                trainlog.add_image('diff', vutils.make_grid(alpha_p-alpha_gt, normalize=False, nrow=4))
             if (i+1) % 500 == 0 and args.train_phase != 'pre_train_m_net':
                 trainlog.add_trimap(trimap_pre)
                 trainlog.add_trimap_gt(trimap_gt)
