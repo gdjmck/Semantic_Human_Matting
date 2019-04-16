@@ -248,6 +248,15 @@ def loss_octave(octave_gt, octave):
         loss += criterion(octave[i], octave_gt[i])
     return loss
 
+def unsure_octave(unsure_alpha):
+    octave = []
+    half = unsure_alpha
+    for i in range(4):
+        half = F.upsample(half, size=(half.size(2)//2, half.size(3)//2), mode='bilinear')
+        octave.append(half>0.2)
+    return octave
+
+
 def main():
 
     print("=============> Loading args")
@@ -318,8 +327,6 @@ def main():
             print('batch ', i)
             img, trimap_gt, alpha_gt, octave_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha'], sample_batched['octave']
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
-            for j in range(len(octave_gt)):
-                octave_gt[j] = octave_gt[j].to(device)
 
             # end_to_end  or  pre_train_t_net
             if args.train_phase != 'pre_train_m_net':
@@ -340,6 +347,10 @@ def main():
                 m_net_input = torch.cat((img, trimap_softmax), 1).to(device)
                 alpha_r, octave = model.m_net(m_net_input)
                 alpha_p = fg_gt + unsure_gt * alpha_r
+                unsure_msk_octave = unsure_octave(trimap_gt[:, 1, :, :])
+                for j in range(len(octave_gt)):
+                    octave_gt[j] = (octave_gt[j]*unsure_msk_octave[j])
+                    octave[j] = (octave[j]*unsure_msk_octave[j])
                 octave_loss = loss_octave(octave_gt, octave)
                 loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args,
                                                                             img, 

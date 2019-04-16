@@ -108,25 +108,21 @@ class M_net(nn.Module):
         # --------
         x = self.de_conv_bn_relu_1(x)
         sixteenth = x.max(dim=1, keepdim=True)[0] # (b, 1, h/16, w/16)
-        print('16th :', sixteenth.shape)
         x = self.up_pool_1(x, idx_4)
         #x = self.deconv_1(x)
         
         x = self.de_conv_bn_relu_2(x)
         eighth = x.max(dim=1, keepdim=True)[0] # (b, 1, h/8, w/8)
-        print('8th :', eighth.shape)
         x = self.up_pool_2(x, idx_3)
         #x = self.deconv_2(x)
 
         x = self.de_conv_bn_relu_3(x)
         forth = x.max(dim=1, keepdim=True)[0] # (b, 1, h/4, w/4)
-        print('4th :', forth.shape)
         x = self.up_pool_3(x, idx_2)
         #x = self.deconv_3(x)
 
         x = self.de_conv_bn_relu_4(x)
         half = x.max(dim=1, keepdim=True)[0] # (b, 1, h/2, w/2)
-        print('2nd :', half.shape)
         x = self.up_pool_4(x, idx_1)
         #x = self.deconv_4(x)
         
