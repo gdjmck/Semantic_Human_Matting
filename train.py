@@ -347,7 +347,7 @@ def main():
                 m_net_input = torch.cat((img, trimap_softmax), 1).to(device)
                 alpha_r, octave = model.m_net(m_net_input)
                 alpha_p = fg_gt + unsure_gt * alpha_r
-                unsure_msk_octave = unsure_octave(trimap_gt==1)
+                unsure_msk_octave = unsure_octave((trimap_gt==1).type(torch.FloatTensor))
                 for j in range(len(octave_gt)):
                     octave_gt[j] = (octave_gt[j]*unsure_msk_octave[j])
                     octave[j] = (octave[j]*unsure_msk_octave[j])
