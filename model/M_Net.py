@@ -107,18 +107,22 @@ class M_net(nn.Module):
         # decoder
         # --------
         x = self.de_conv_bn_relu_1(x)
+        sixteenth = x.max(dim=1, keepdim=True) # (b, 1, h/16, w/16)
         x = self.up_pool_1(x, idx_4)
         #x = self.deconv_1(x)
         
         x = self.de_conv_bn_relu_2(x)
+        eighth = x.max(dim=1, keepdim=True) # (b, 1, h/8, w/8)
         x = self.up_pool_2(x, idx_3)
         #x = self.deconv_2(x)
 
         x = self.de_conv_bn_relu_3(x)
+        forth = x.max(dim=1, keepdim=True) # (b, 1, h/4, w/4)
         x = self.up_pool_3(x, idx_2)
         #x = self.deconv_3(x)
 
         x = self.de_conv_bn_relu_4(x)
+        half = x.max(dim=1, keepdim=True) # (b, 1, h/2, w/2)
         x = self.up_pool_4(x, idx_1)
         #x = self.deconv_4(x)
         
@@ -127,7 +131,7 @@ class M_net(nn.Module):
         # raw alpha pred
         out = self.conv(x)
 
-        return out 
+        return out , [half, forth, eighth, sixteenth]
 
 
 

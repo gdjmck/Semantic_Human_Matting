@@ -240,6 +240,14 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     return loss, L_alpha, L_composition, L_t, L1_t, IOU_t, IOU_alpha
 
 
+def loss_octave(octave_gt, octave):
+    assert len(octave) == len(octave_gt)
+    criterion = nn.L1Loss()
+    loss = 0
+    for i in range(len(octave)):
+        loss += criterion(octave, octave_gt)
+    return loss
+
 def main():
 
     print("=============> Loading args")
@@ -308,8 +316,10 @@ def main():
         t0 = time.time()
         for i, sample_batched in enumerate(trainloader):
             print('batch ', i)
-            img, trimap_gt, alpha_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha']
+            img, trimap_gt, alpha_gt, octave_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha'], sample_batched['octave']
             img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
+            for j in len(octave_gt):
+                octave_gt[j] = octave_gt[j].to(device)
 
             # end_to_end  or  pre_train_t_net
             if args.train_phase != 'pre_train_m_net':
@@ -328,15 +338,19 @@ def main():
                 #trimap_softmax = F.softmax(trimap_gt, dim=1)
                 bg_gt, unsure_gt, fg_gt = torch.split(trimap_softmax, 1, dim=1)
                 m_net_input = torch.cat((img, trimap_softmax), 1).to(device)
-                alpha_r = model.m_net(m_net_input)
+                alpha_r, octave = model.m_net(m_net_input)
                 alpha_p = fg_gt + unsure_gt * alpha_r
+                octave_loss = loss_octave(octave_gt, octave)
                 loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args,
                                                                             img, 
                                                                             trimap_gt,
                                                                             trimap_gt, 
                                                                             alpha_p,
                                                                             alpha_gt)
-                print('loss: %.5f\tL_composision: %.5f\tL_alpha: %.5f'%(loss.item(), L_composition.item(), L_alpha.item()))
+                loss += octave_loss
+                trainlog.add_scalar('octave_loss', octave_loss.item())
+                print('loss: %.5f\tL_composision: %.5f\tL_alpha: %.5f\toctave_loss: %.3f'
+                    %(loss.item(), L_composition.item(), L_alpha.item(), octave_loss.item()))
 
             optimizer.zero_grad()
             loss.backward()

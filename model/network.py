@@ -42,7 +42,7 @@ class net(nn.Module):
         m_net_input = torch.cat((input, trimap_softmax), 1)
 
         # matting
-        alpha_r = self.m_net(m_net_input)
+        alpha_r, _ = self.m_net(m_net_input)
         # fusion module
         # paper : alpha_p = fs + us * alpha_r
         alpha_p = fg + unsure * alpha_r
