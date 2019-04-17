@@ -358,7 +358,7 @@ def main():
                                                                             trimap_gt, 
                                                                             alpha_p,
                                                                             alpha_gt)
-                loss += octave_loss
+                loss = loss.add(octave_loss)
                 trainlog.add_scalar('octave_loss', octave_loss.item())
                 print('loss: %.5f\tL_composision: %.5f\tL_alpha: %.5f\toctave_loss: %.3f'
                     %(loss.item(), L_composition.item(), L_alpha.item(), octave_loss.item()))
