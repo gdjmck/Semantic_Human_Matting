@@ -149,13 +149,7 @@ class human_matting_data(data.Dataset):
         trimap = trimap[0,:,:].unsqueeze_(0)
         alpha = alpha[-1,:,:].unsqueeze_(0)
 
-        octave = []
-        half = alpha
-        for i in range(4):
-            half = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)(half)
-            octave.append(half)
-
-        sample = {'image': image, 'trimap': trimap, 'alpha': alpha, 'octave': octave}
+        sample = {'image': image, 'trimap': trimap, 'alpha': alpha}
 
         return sample
 
