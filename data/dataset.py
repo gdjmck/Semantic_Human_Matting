@@ -31,8 +31,8 @@ def read_files(data_dir, file_name={}):
 def random_scale_and_creat_patch(image, trimap, alpha, patch_size):
     # short side scale to patch_size
     h, w, c = image.shape
-    scale = max(patch_size/h, patch_size/w)
-    target_shape = (int(h*scale), int(w*scale))
+    scale = max(patch_size*1.0/h, patch_size*1.0/w)
+    target_shape = (int(np.round(h*scale)), int(np.round(w*scale)))
     assert target_shape[0] == patch_size or target_shape[1] == patch_size
     assert target_shape[0] >= patch_size and target_shape[1] >= patch_size
     image = cv2.resize(image, target_shape, interpolation=cv2.INTER_CUBIC)
