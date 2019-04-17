@@ -42,8 +42,8 @@ def random_scale_and_creat_patch(image, trimap, alpha, patch_size):
         print('random scale makes Null image')
     # creat patch
     h, w, c = image.shape
-    x = r.randrange(0, w - patch_size)
-    y = r.randrange(0, h - patch_size)
+    x = r.randrange(0, w - patch_size) if w > patch_size else 0
+    y = r.randrange(0, h - patch_size) if h > patch_size else 0
     image = image[y:y + patch_size, x:x+patch_size, :]
     trimap = trimap[y:y + patch_size, x:x+patch_size]
     alpha = alpha[y:y+patch_size, x:x+patch_size, :]
