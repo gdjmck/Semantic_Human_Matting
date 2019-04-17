@@ -9,6 +9,7 @@ import random as r
 import numpy as np
 
 import torch
+import torch.nn as nn
 import torch.utils.data as data
 
 
@@ -28,39 +29,27 @@ def read_files(data_dir, file_name={}):
 
 
 def random_scale_and_creat_patch(image, trimap, alpha, patch_size):
-    # random scale
-    if r.random() < 0.5:
-        h, w, c = image.shape
-        scale = 1 + 0.5*r.random()
-        target_shape = (int(patch_size*scale), int(patch_size*scale*h/w)) if w < h else (int(patch_size*scale*w/h), int(patch_size*scale))
-        image = cv2.resize(image, target_shape, interpolation=cv2.INTER_CUBIC)
-        trimap = cv2.resize(trimap, target_shape, interpolation=cv2.INTER_NEAREST)
-        alpha = cv2.resize(alpha, target_shape, interpolation=cv2.INTER_CUBIC)
-        if (0 in list(image.shape)) or (0 in list(trimap.shape)) or (0 in list(alpha.shape)):
-            print('random scale makes Null image')
+    # short side scale to patch_size
+    h, w, c = image.shape
+    scale = max(patch_size*1.0/h, patch_size*1.0/w)
+    target_shape = (int(np.round(h*scale)), int(np.round(w*scale)))
+    assert target_shape[0] == patch_size or target_shape[1] == patch_size
+    assert target_shape[0] >= patch_size and target_shape[1] >= patch_size
+    image = cv2.resize(image, target_shape, interpolation=cv2.INTER_CUBIC)
+    trimap = cv2.resize(trimap, target_shape, interpolation=cv2.INTER_NEAREST)
+    alpha = cv2.resize(alpha, target_shape, interpolation=cv2.INTER_CUBIC)
+    if (0 in list(image.shape)) or (0 in list(trimap.shape)) or (0 in list(alpha.shape)):
+        print('random scale makes Null image')
     # creat patch
-    if r.random() < 0.5:
-        h, w, c = image.shape
-        if h > patch_size and w > patch_size:
-            x = r.randrange(0, w - patch_size)
-            y = r.randrange(0, h - patch_size)
-            image = image[y:y + patch_size, x:x+patch_size, :]
-            trimap = trimap[y:y + patch_size, x:x+patch_size]
-            alpha = alpha[y:y+patch_size, x:x+patch_size, :]
-            if (0 in list(image.shape)) or (0 in list(trimap.shape)) or (0 in list(alpha.shape)):
-                print('create patch makes Null image')
-        else:
-            image = cv2.resize(image, (patch_size,patch_size), interpolation=cv2.INTER_CUBIC)
-            trimap = cv2.resize(trimap, (patch_size,patch_size), interpolation=cv2.INTER_NEAREST)
-            alpha = cv2.resize(alpha, (patch_size,patch_size), interpolation=cv2.INTER_CUBIC)
-            if (0 in list(image.shape)) or (0 in list(trimap.shape)) or (0 in list(alpha.shape)):
-                print('resize makes Null image')
-    else:
-        image = cv2.resize(image, (patch_size,patch_size), interpolation=cv2.INTER_CUBIC)
-        trimap = cv2.resize(trimap, (patch_size,patch_size), interpolation=cv2.INTER_NEAREST)
-        alpha = cv2.resize(alpha, (patch_size,patch_size), interpolation=cv2.INTER_CUBIC)
-        if (0 in list(image.shape)) or (0 in list(trimap.shape)) or (0 in list(alpha.shape)):
-            print('simple resize makes Null image')
+    h, w, c = image.shape
+    x = r.randrange(0, w - patch_size) if w > patch_size else 0
+    y = r.randrange(0, h - patch_size) if h > patch_size else 0
+    image = image[y:y + patch_size, x:x+patch_size, :]
+    trimap = trimap[y:y + patch_size, x:x+patch_size]
+    alpha = alpha[y:y+patch_size, x:x+patch_size, :]
+    assert image.shape[0] == patch_size and image.shape[1] == patch_size
+    if (0 in list(image.shape)) or (0 in list(trimap.shape)) or (0 in list(alpha.shape)):
+        print('create patch makes Null image')
 
     return image, trimap, alpha
 
@@ -160,7 +149,13 @@ class human_matting_data(data.Dataset):
         trimap = trimap[0,:,:].unsqueeze_(0)
         alpha = alpha[-1,:,:].unsqueeze_(0)
 
-        sample = {'image': image, 'trimap': trimap, 'alpha': alpha}
+        octave = []
+        half = alpha
+        for i in range(4):
+            half = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)(half)
+            octave.append(half)
+
+        sample = {'image': image, 'trimap': trimap, 'alpha': alpha, 'octave': octave}
 
         return sample
 
