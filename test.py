@@ -69,7 +69,7 @@ class Dataset(torch.utils.data.Dataset):
             assert os.path.exists(image_folder), 'Please make sure image folder in testdata folder'
             self.image = [os.path.join(args.data, 'image', imgfile) for imgfile in image_folder]
             for imgfile in self.image:
-                trimapfile = imgfile.replace('image', 'trimap', count=1).strip()[:-3]+'png'
+                trimapfile = imgfile.replace('image', 'trimap', 1).strip()[:-3]+'png'
                 assert os.path.isfile(trimapfile), '{} is not a valid file'.format(trimapfile)
         else:
             self.image = [os.path.join(self.args.data, imgfile) for imgfile in os.listdir(self.args.data)]
@@ -108,14 +108,16 @@ class Dataset(torch.utils.data.Dataset):
 def main(args):
     model = load_model(args)
     test_data = Dataset(args)
-    for sample in iter(test_data):
+    for i, sample in enumerate(iter(test_data)):
+        if i > 10:
+            break
         if args.subnet == 'm_net':
             trimap = sample['trimap']
             print('sample trimap.shape: ', trimap.shape, sample['image'].shape)
             trimap_softmax = torch.zeros([trimap.shape[0], 3, trimap.shape[-2], trimap.shape[-1]], dtype=torch.float32)
             trimap_softmax.scatter_(1, trimap.long().data.cpu(), 1)
             m_net_input = torch.cat((sample['image'], trimap_softmax), 1)
-            alpha_r = model(m_net_input)
+            alpha_r = model.m_net(m_net_input)
             result = trimap_softmax[:, 2, ...] + trimap_softmax[:, 1, ...]*alpha_r
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']), result)
 
