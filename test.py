@@ -145,7 +145,13 @@ def main(args):
             print(trimap_softmax.shape, alpha_r.shape)
             result = trimap_softmax[2, ...] + trimap_softmax[1, ...]*alpha_r
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']), result.data.cpu().numpy()*255)
-            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.jpg', '_img.jpg'), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
+        elif args.subnet == 'end_to_end':
+            net_input = sample['image']
+            net_input = net_input.unsqueeze(0)
+            alpha = model(net_input)
+            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.jpg', '_alpha.jpg'), alpha.data.cpu().numpy()*255)
+        cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.jpg', '_img.jpg'), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
+        
 
 if __name__ == '__main__':
     main(args)
