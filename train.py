@@ -231,7 +231,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
     # train_phase
     if args.train_phase == 'pre_train_t_net':
-        loss = L_t + L2_t
+        loss = L_t
     if args.train_phase == 'end_to_end':
         loss = L_p + 0.01*L_t
     if args.train_phase == 'pre_train_m_net':
