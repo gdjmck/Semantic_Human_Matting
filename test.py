@@ -90,7 +90,7 @@ class Dataset(torch.utils.data.Dataset):
             for f in absent_file:
                 self.image.remove(f)
         else:
-            self.image = [os.path.join(self.args.data, imgfile) for imgfile in os.listdir(self.args.data)]
+            self.image = [os.path.join(self.args.data, 'image', imgfile) for imgfile in os.listdir(os.path.join(self.args.data, 'image'))]
 
     def center_crop(self, image, type='image'):
         interpolation = cv2.INTER_CUBIC if type == 'image' else cv2.INTER_NEAREST
@@ -133,6 +133,7 @@ def main(args):
     for i, sample in enumerate(iter(test_data)):
         if i > 10:
             break
+        postfix = sample['filename'].split('.')[-1]
         if args.subnet == 'm_net':
             trimap = sample['trimap']
             print('sample trimap.shape: ', trimap.shape, sample['image'].shape)
@@ -148,9 +149,11 @@ def main(args):
         elif args.subnet == 'end_to_end':
             net_input = sample['image']
             net_input = net_input.unsqueeze(0)
-            alpha = model(net_input)
-            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.jpg', '_alpha.jpg'), alpha.data.cpu().numpy()*255)
-        cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.jpg', '_img.jpg'), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
+            alpha = model(net_input)[1]
+            alpha = alpha.squeeze()
+            print('end_to_end alpha:', alpha.shape, type(alpha))
+            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_alpha.'+postfix), alpha.data.cpu().numpy()*255)
+        cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_img.'+postfix), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
         
 
 if __name__ == '__main__':
