@@ -9,10 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from model.M_Net import M_net
-from model.T_Net import T_mv2_unet
-
-
-T_net = T_mv2_unet
+from model.T_Net_psp import PSPNet
 
 
 class net(nn.Module):
@@ -24,7 +21,7 @@ class net(nn.Module):
 
         super(net, self).__init__()
 
-        self.t_net = T_net()
+        self.t_net = PSPNet()
         self.m_net = M_net()
 
 

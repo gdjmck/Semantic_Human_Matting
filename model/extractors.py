@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import math
+import os
 
 import torch
 import torch.nn as nn
@@ -8,6 +9,7 @@ from torch.utils import model_zoo
 from torchvision.models.densenet import densenet121, densenet161
 from torchvision.models.squeezenet import squeezenet1_1
 
+pretrain_folder = './model/pretrain_model'
 
 def load_weights_sequential(target, source_state):
     """
@@ -350,7 +352,17 @@ def resnet34(pretrained=True):
 def resnet50(pretrained=True):
     model = ResNet(Bottleneck, [3, 4, 6, 3])
     if pretrained:
-        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet50']))
+        ckpt_resnet50 = None
+        for ckpt_file in os.listdir(pretrain_folder):
+            if 'resnet50' in ckpt_file:
+                ckpt_resnet50 = torch.load(os.path.join(pretrain_folder, ckpt_file))
+                break
+        if ckpt_resnet50:
+            print('Resnet50 loaded.')
+            load_weights_sequential(model, ckpt_resnet50)
+        else:
+            print('Loading model from internet')
+            load_weights_sequential(model, model_zoo.load_url(model_urls['resnet50']))
     return model
 
 
