@@ -161,7 +161,7 @@ def main(args):
             trimap = model(net_input)
             trimap_softmax = F.softmax(trimap, dim=1)
             print('trimap shape:', trimap_softmax.shape)
-            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), trimap_softmax.data.cpu().numpy()*255)
+            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), np.moveaxis(trimap_softmax.squeeze().data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)))
         cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_img.'+postfix), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
         
 
