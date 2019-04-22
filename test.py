@@ -57,6 +57,8 @@ def load_model(args, model):
             print('missing key:\t', key)
             state_dict.pop(key)
     model.load_state_dict(state_dict, strict=False)
+    if args.subnet == 't_net':
+        model = model.t_net
 
     model.eval()
     model.to(device)
@@ -153,6 +155,13 @@ def main(args):
             alpha = alpha.squeeze()
             print('end_to_end alpha:', alpha.shape, type(alpha))
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_alpha.'+postfix), alpha.data.cpu().numpy()*255)
+        elif args.subnet == 't_net':
+            net_input = sample['image']
+            net_input = net_input.unsqueeze(0)
+            trimap = model(net_input)
+            trimap_softmax = F.softmax(trimap, dim=1)
+            print('trimap shape:', trimap_softmax.shape)
+            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), trimap_softmax.data.cpu().numpy()*255)
         cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_img.'+postfix), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
         
 
