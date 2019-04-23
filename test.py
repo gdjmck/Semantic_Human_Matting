@@ -84,10 +84,15 @@ def prepare_image(img, patchsize=256):
     return img_tensor, (x_gap, y_gap)
 
 def restore_shape(alpha, gap):
+    print(alpha.shape)
     if gap[0] != 0: # 填充列
-        alpha = np.c_[np.zeros(alpha.shape[0], gap[0]), alpha]
+        fill_material = np.zeros((alpha.shape[0], gap[0]))
+        print('column material', fill_material.shape)
+        alpha = np.c_[fill_material, alpha]
     if gap[1] != 0: # 填充行
-        alpha = np.r_[gap[1], np.zeros(alpha.shape[1]), alpha]
+        fill_material = np.zeros((gap[1], alpha.shape[1]))
+        print('row material', fill_material.shape)
+        alpha = np.r_[fill_material, alpha]
     return alpha
 
 def predict(img):
@@ -203,7 +208,6 @@ def main(args):
             net_input = net_input.to(device)
             trimap = model(net_input)
             trimap_softmax = F.softmax(trimap, dim=1)
-            print('trimap shape:', trimap_softmax.shape)
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), np.moveaxis(trimap_softmax.squeeze().data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)))
         cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_img.'+postfix), np.moveaxis(sample['image'].squeeze().data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
         
@@ -212,4 +216,4 @@ if __name__ == '__main__':
     #main(args)
     img = cv2.imread(args.data, -1)
     alpha = predict(img)
-    cv2.imwrite('test.png', alpha)
+    cv2.imwrite('test.png', alpha*255.)
