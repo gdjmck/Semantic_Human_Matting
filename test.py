@@ -77,7 +77,7 @@ def prepare_image(img, patchsize=256):
     scale = patchsize*1.0 / min(h, w)
     resize_shape = (int(np.round(w*scale)), int(np.round(h*scale)))
     img = cv2.resize(img, resize_shape, interpolation=cv2.INTER_CUBIC)
-    x_gap, y_gap = img.shape[1] % 8, img.shape[0] % 8
+    x_gap, y_gap = img.shape[1] % 16, img.shape[0] % 16
     img = img[y_gap:, x_gap:, ...]
     img = (img.astype(np.float32) - (114., 121., 134.)) / 255.
     img_tensor = dataset.np2Tensor(img).unsqueeze(0)
