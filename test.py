@@ -137,8 +137,8 @@ def main(args):
     model = network.net()
     model = load_model(args, model)
     test_data = Dataset(args)
-    test_data = DataLoader(test_data, batch_size=1, drop_last=False, shuffle=True)
-    for i, sample in enumerate(test_data):
+    testloader = DataLoader(test_data, batch_size=1, drop_last=False, shuffle=True)
+    for i, sample in enumerate(testloader):
         if i > 10:
             break
         postfix = sample['filename'].split('.')[-1]
