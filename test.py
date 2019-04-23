@@ -128,6 +128,9 @@ class Dataset(torch.utils.data.Dataset):
         image = dataset.np2Tensor(image)
         return {'image': image, 'trimap': trimap, 'filename': self.image[index].split('/')[-1]}
 
+    def __len__(self):
+        return len(self.image)
+
 
 def main(args):
     model = network.net()
