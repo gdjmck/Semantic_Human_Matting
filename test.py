@@ -5,6 +5,7 @@ import numpy as np
 import os 
 import random
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 import PIL.Image as Image
 from model.M_Net import M_net
 from model import network
@@ -136,7 +137,7 @@ def main(args):
     model = network.net()
     model = load_model(args, model)
     test_data = Dataset(args)
-    test_data = random.shuffle(iter(test_data))
+    test_data = DataLoader(test_data, batch_size=1, drop_last=False, shuffle=True)
     for i, sample in enumerate(test_data):
         if i > 10:
             break
