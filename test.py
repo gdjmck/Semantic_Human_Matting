@@ -77,14 +77,24 @@ def prepare_image(img, patchsize=256):
     scale = patchsize*1.0 / min(h, w)
     resize_shape = (int(np.round(w*scale)), int(np.round(h*scale)))
     img = cv2.resize(img, resize_shape, interpolation=cv2.INTER_CUBIC)
+    x_gap, y_gap = img.shape[1] % 8, img.shape[0] % 8
+    img = img[y_gap:, x_gap:, ...]
     img = (img.astype(np.float32) - (114., 121., 134.)) / 255.
     img_tensor = dataset.np2Tensor(img).unsqueeze(0)
-    return img_tensor
+    return img_tensor, (x_gap, y_gap)
+
+def restore_shape(alpha, gap):
+    if gap[0] != 0:
+        alpha = np.c_[np.zeros(alpha.shape[0], alpha)]
+    if gap[1] != 0:
+        alpha = np.r_[np.zeros(alpha.shape[1]), alpha]
+    return alpha
 
 def predict(img):
-    net_input = prepare_image(img)
+    net_input, gap = prepare_image(img)
     net_output = model(net_input)
     alpha = net_output[1].squeeze().data.cpu().numpy()
+    alpha = restore_shape(alpha, gap)
     alpha = cv2.resize(alpha, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
     return alpha
 
