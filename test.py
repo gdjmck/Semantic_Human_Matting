@@ -24,7 +24,6 @@ args = parser.parse_args()
 
 torch.set_grad_enabled(False)
 
-
 #################################
 #----------------
 if args.without_gpu:
@@ -41,6 +40,12 @@ else:
 
 #################################
 #---------------
+
+
+model = network.net()
+model = load_model(args, model)
+
+
 def model_param_count(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
@@ -66,6 +71,23 @@ def load_model(args, model):
     model.to(device)
     
     return model
+
+def prepare_image(img, patchsize=256):
+    # short side to patchsize
+    h, w = img.shape[0], img.shape[1]
+    scale = patchsize*1.0 / min(h, w)
+    resize_shape = (int(np.round(w*scale)), int(np.round(h*scale)))
+    img = cv2.resize(img, resize_shape, interpolation=cv2.INTER_CUBIC)
+    img = (img.astype(np.float32) - (114., 121., 134.)) / 255.
+    img_tensor = dataset.np2Tensor(img).unsqueeze(0)
+    return img_tensor
+
+def predict(img):
+    net_input = prepare_image(img)
+    net_output = model(net_input)
+    alpha = net_output[1].squeeze().data.cpu().numpy()
+    alpha = cv2.resize(alpha, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
+    return alpha
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, args, patchsize=256):
@@ -151,6 +173,7 @@ def main(args):
             trimap_softmax = torch.zeros([3, trimap.shape[-2], trimap.shape[-1]], dtype=torch.float32)
             trimap_softmax.scatter_(0, trimap.long().data.cpu(), 1)
             m_net_input = torch.cat((sample['image'], trimap_softmax), 0)
+            m_net_input = m_net_input.to(device)
             alpha_r = model.m_net(m_net_input)
             alpha_r = alpha_r.squeeze()
             print(trimap_softmax.shape, alpha_r.shape)
@@ -158,6 +181,7 @@ def main(args):
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']), result.data.cpu().numpy()*255)
         elif args.subnet == 'end_to_end':
             net_input = sample['image']
+            net_input = net_input.to(device)
             net_output = model(net_input)
             alpha = net_output[1]
             alpha = alpha.squeeze()
@@ -167,6 +191,7 @@ def main(args):
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), np.moveaxis(trimap.data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)))
         elif args.subnet == 't_net':
             net_input = sample['image']
+            net_input = net_input.to(device)
             trimap = model(net_input)
             trimap_softmax = F.softmax(trimap, dim=1)
             print('trimap shape:', trimap_softmax.shape)
@@ -175,4 +200,7 @@ def main(args):
         
 
 if __name__ == '__main__':
-    main(args)
+    #main(args)
+    img = cv2.imread(args.data, -1)
+    alpha = predict(img)
+    cv2.imwrite('test.png', alpha)
