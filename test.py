@@ -84,10 +84,10 @@ def prepare_image(img, patchsize=256):
     return img_tensor, (x_gap, y_gap)
 
 def restore_shape(alpha, gap):
-    if gap[0] != 0:
-        alpha = np.c_[np.zeros(alpha.shape[0], alpha)]
-    if gap[1] != 0:
-        alpha = np.r_[np.zeros(alpha.shape[1]), alpha]
+    if gap[0] != 0: # 填充列
+        alpha = np.c_[np.zeros(alpha.shape[0], gap[0]), alpha]
+    if gap[1] != 0: # 填充行
+        alpha = np.r_[gap[1], np.zeros(alpha.shape[1]), alpha]
     return alpha
 
 def predict(img):
