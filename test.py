@@ -3,6 +3,7 @@ import torch
 import argparse
 import numpy as np
 import os 
+import random
 import torch.nn.functional as F
 import PIL.Image as Image
 from model.M_Net import M_net
@@ -132,7 +133,8 @@ def main(args):
     model = network.net()
     model = load_model(args, model)
     test_data = Dataset(args)
-    for i, sample in enumerate(iter(test_data)):
+    test_data = random.shuffle(iter(test_data))
+    for i, sample in enumerate(test_data):
         if i > 10:
             break
         postfix = sample['filename'].split('.')[-1]
