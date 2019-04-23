@@ -143,6 +143,7 @@ def main(args):
     for i, sample in enumerate(testloader):
         if i > 10:
             break
+        sample['filename'] = sample['filename'][0]
         postfix = sample['filename'].split('.')[-1]
         if args.subnet == 'm_net':
             trimap = sample['trimap']
@@ -150,7 +151,6 @@ def main(args):
             trimap_softmax = torch.zeros([3, trimap.shape[-2], trimap.shape[-1]], dtype=torch.float32)
             trimap_softmax.scatter_(0, trimap.long().data.cpu(), 1)
             m_net_input = torch.cat((sample['image'], trimap_softmax), 0)
-            m_net_input = m_net_input.unsqueeze(0)
             alpha_r = model.m_net(m_net_input)
             alpha_r = alpha_r.squeeze()
             print(trimap_softmax.shape, alpha_r.shape)
@@ -158,19 +158,17 @@ def main(args):
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']), result.data.cpu().numpy()*255)
         elif args.subnet == 'end_to_end':
             net_input = sample['image']
-            net_input = net_input.unsqueeze(0)
             alpha = model(net_input)[1]
             alpha = alpha.squeeze()
             print('end_to_end alpha:', alpha.shape, type(alpha))
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_alpha.'+postfix), alpha.data.cpu().numpy()*255)
         elif args.subnet == 't_net':
             net_input = sample['image']
-            net_input = net_input.unsqueeze(0)
             trimap = model(net_input)
             trimap_softmax = F.softmax(trimap, dim=1)
             print('trimap shape:', trimap_softmax.shape)
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), np.moveaxis(trimap_softmax.squeeze().data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)))
-        cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_img.'+postfix), np.moveaxis(sample['image'].data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
+        cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_img.'+postfix), np.moveaxis(sample['image'].squeeze().data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)) + (114., 121., 134.))
         
 
 if __name__ == '__main__':
