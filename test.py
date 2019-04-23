@@ -158,10 +158,13 @@ def main(args):
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']), result.data.cpu().numpy()*255)
         elif args.subnet == 'end_to_end':
             net_input = sample['image']
-            alpha = model(net_input)[1]
+            net_output = model(net_input)
+            alpha = net_output[1]
             alpha = alpha.squeeze()
-            print('end_to_end alpha:', alpha.shape, type(alpha))
+            trimap = net_output[0]
+            trimap = F.softmax(trimap, dim=1).squeeze()
             cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_alpha.'+postfix), alpha.data.cpu().numpy()*255)
+            cv2.imwrite(os.path.join(args.save_dir, sample['filename']).replace('.'+postfix, '_trimap.'+postfix), np.moveaxis(trimap.data.cpu().numpy()*255, (0, 1, 2), (-1, 0, 1)))
         elif args.subnet == 't_net':
             net_input = sample['image']
             trimap = model(net_input)
