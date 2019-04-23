@@ -109,6 +109,7 @@ class Dataset(torch.utils.data.Dataset):
         return image
 
     def __getitem__(self, index):
+        sample = {}
         image = cv2.imread(self.image[index], -1)
         if self.args.subnet == 'm_net':
             trimap = cv2.imread(self.image[index].replace('image', 'trimap', 1).strip()[:-3]+'png', -1)
@@ -121,13 +122,14 @@ class Dataset(torch.utils.data.Dataset):
             trimap = self.center_crop(trimap, type='trimap')
             trimap = np.expand_dims(trimap, -1)
             trimap = dataset.np2Tensor(trimap)
-        else:
-            trimap = None
+            sample['trimap'] = trimap
         image = self.center_crop(image)
 
         image = (image.astype(np.float32) - (114., 121., 134.)) / 255.
         image = dataset.np2Tensor(image)
-        return {'image': image, 'trimap': trimap, 'filename': self.image[index].split('/')[-1]}
+        sample['image'] = image
+        sample['filename'] = self.image[index].split('/')[-1]
+        return sample
 
     def __len__(self):
         return len(self.image)
