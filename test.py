@@ -41,11 +41,6 @@ else:
 #################################
 #---------------
 
-
-model = network.net()
-model = load_model(args, model)
-
-
 def model_param_count(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
@@ -71,6 +66,10 @@ def load_model(args, model):
     model.to(device)
     
     return model
+
+
+model = network.net()
+model = load_model(args, model)
 
 def prepare_image(img, patchsize=256):
     # short side to patchsize
