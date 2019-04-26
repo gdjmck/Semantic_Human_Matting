@@ -102,7 +102,7 @@ class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
         self.depthwise_1 = nn.Sequential(
-            nn.Conv2d(512, 512, 3, 2, 1, groups=512, bias=False)
+            nn.Conv2d(512, 512, 3, 2, 1, groups=512, bias=False),
             nn.BatchNorm2d(512),
             nn.ReLU6(inplace=True)
         )
@@ -112,7 +112,7 @@ class Discriminator(nn.Module):
         )
 
         self.depthwise_2 = nn.Sequential(
-            nn.Conv2d(256, 256, 3, 2, 1, groups=256, bias=False)
+            nn.Conv2d(256, 256, 3, 2, 1, groups=256, bias=False),
             nn.BatchNorm2d(256),
             nn.ReLU6(inplace=True)
         )
@@ -122,7 +122,7 @@ class Discriminator(nn.Module):
         )
 
         self.squeeze_1 = nn.Sequential(
-            nn.Conv2d(128, 64, 1, 1, 0, bias=False)
+            nn.Conv2d(128, 64, 1, 1, 0, bias=False),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True)
         )
@@ -134,7 +134,7 @@ class Discriminator(nn.Module):
         )
 
         self.squeeze_3 = nn.Sequential(
-            nn.Conv2d(32, 16, 1, 1, 0, bias=False)
+            nn.Conv2d(32, 16, 1, 1, 0, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(inplace=True)
         )

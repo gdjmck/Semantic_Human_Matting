@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 import time
 import os
 from data import dataset
-from model import network, utils
+from model import network, utils, Anomaly_Net
 import torch.nn.functional as F
 
 
@@ -190,56 +190,6 @@ class Train_Log():
         self.logFile.write(log + '\n')
 
 
-def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
-
-    criterion = nn.CrossEntropyLoss()
-    L1 = nn.L1Loss()
-    # -------------------------------------
-    # classification loss L_t
-    # ------------------------
-    # Cross Entropy 
-    # criterion = nn.BCELoss()
-    # trimap_pre = trimap_pre.contiguous().view(-1)
-    # trimap_gt = trimap_gt.view(-1)
-    # L_t = criterion(trimap_pre, trimap_gt)
-    if args.train_phase != 'pre_train_m_net':
-        assert trimap_gt.shape[1] == 1
-
-        L1_t = L1(F.softmax(trimap_pre, dim=1)[:, 0, :, :], (trimap_gt[:, 0, :, :]==0).type(torch.FloatTensor))
-        L_t = criterion(trimap_pre, trimap_gt[:,0,:,:].long())
-        IOU_t = [utils.iou_pytorch((trimap_pre[:, 0, :, :]>trimap_pre[:, 1, :, :]) & (trimap_pre[:, 0, :, :]>trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==0),
-                 utils.iou_pytorch((trimap_pre[:, 1, :, :]>=trimap_pre[:, 0, :, :]) & (trimap_pre[:, 1, :, :]>=trimap_pre[:, 2, :, :]), trimap_gt[:, 0, :, :]==1),
-                 utils.iou_pytorch((trimap_pre[:, 2, :, :]>trimap_pre[:, 0, :, :]) & (trimap_pre[:, 2, :, :]>trimap_pre[:, 1, :, :]), trimap_gt[:, 0, :, :]==2)]
-    else: # train_phase == 'pre_train_m_net', L2_t = L_t = IOU_t = tensor(0.)
-        L1_t = L_t = torch.Tensor([0.])
-        IOU_t = [torch.Tensor([0.])]*3
-    # -------------------------------------
-    # prediction loss L_p
-    # ------------------------
-    # l_alpha
-    L_alpha = L1(alpha_pre, alpha_gt)
-    IOU_alpha = utils.iou_pytorch(alpha_pre>1e-5, alpha_gt>1e-5)
-
-    # L_composition
-    fg = torch.cat((alpha_gt, alpha_gt, alpha_gt), 1) * img
-    fg_pre = torch.cat((alpha_pre, alpha_pre, alpha_pre), 1) * img
-
-    L_composition = L1(fg_pre, fg)
-
-    #L_p = 0.5*L_alpha + 0.5*L_composition
-    L_p = L_alpha
-
-    # train_phase
-    if args.train_phase == 'pre_train_t_net':
-        loss = L_t
-    if args.train_phase == 'end_to_end':
-        loss = L_p + 0.01*L_t
-    if args.train_phase == 'pre_train_m_net':
-        loss = L_p
-        
-    return loss, L_alpha, L_composition, L_t, L1_t, IOU_t, IOU_alpha
-
-
 def main():
 
     print("=============> Loading args")
@@ -256,7 +206,7 @@ def main():
             print("No GPU is is available !")
 
     print("============> Building model ...")
-    model = network.net()    
+    model = Anomaly_Net.AnomalyNet()    
     model.to(device)
 
     print("============> Loading datasets ...")
@@ -274,18 +224,15 @@ def main():
     print('============> Loss function ', args.train_phase)
     print("============> Set optimizer ...")
     lr = args.lr
-    train_params = model.parameters()
-    target_network = model
-    if args.train_phase == 'pre_train_t_net':
-        train_params = model.t_net.parameters()
-        target_network = model.t_net
-    elif args.train_phase == 'pre_train_m_net':
-        train_params = model.m_net.parameters()
-        target_network = model.m_net
-        model.t_net.eval()
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, train_params), \
+    
+    L2_criterion = nn.MSELoss()
+    CE_criterion = nn.CrossEntropyLoss()
+    optimizer_encoder = optim.Adam(filter(lambda p: p.requires_grad, list(model.encoder.parameters())+list(model.decoder.parameters())), \
                                    lr=lr, betas=(0.9, 0.999), 
                                    weight_decay=0.0005)
+    optimizer_discriminator = optim.Adam(filter(lambda p: p.requires_grad, model.classifier),
+                                    lr=lr, betas=(0.9, 0.999),
+                                    weight_decay=0.0005)
 
     print("============> Start Train ! ...")
     start_epoch = 1
@@ -302,43 +249,20 @@ def main():
         loss_array = []
         IOU_t_bg_, IOU_t_unsure_, IOU_t_fg_ = 0, 0, 0
         IOU_alpha_ = 0
-        if args.lrdecayType != 'keep':
-            lr = set_lr(args, epoch, optimizer)
 
         t0 = time.time()
         for i, sample_batched in enumerate(trainloader):
             print('batch ', i)
             img, trimap_gt, alpha_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha']
-            img, trimap_gt, alpha_gt = img.to(device), trimap_gt.to(device), alpha_gt.to(device)
+            img_in = torch.cat((img, alpha_gt), 1)
+            matting = alpha_gt.repeat(1, 3, 1, 1) * img_in
+            img_in, matting = img_in.to(device), matting.to(device)
 
-            # end_to_end  or  pre_train_t_net
-            if args.train_phase != 'pre_train_m_net':
-                trimap_pre, alpha_pre = model(img)
-                loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args, 
-                                                                    img,
-                                                                    trimap_pre, 
-                                                                    trimap_gt, 
-                                                                    alpha_pre, 
-                                                                    alpha_gt)
-                print("Loss calculated %.4f\nL2: %.2f\nbg IOU: %.2f\nunsure IOU: %.2f\nfg IOU: %.2f"%(L_cross.item(), L2_cross.item(), IOU_t[0].item(), IOU_t[1].item(), IOU_t[2].item()))
-            else: # pre_train_m_net
-                trimap_softmax = torch.zeros([trimap_gt.shape[0], 3, trimap_gt.shape[2], trimap_gt.shape[3]], dtype=torch.float32)
-                trimap_softmax.scatter_(1, trimap_gt.long().data.cpu(), 1)
-                trimap_softmax = trimap_softmax.to(device)
-                #trimap_softmax = F.softmax(trimap_gt, dim=1)
-                bg_gt, unsure_gt, fg_gt = torch.split(trimap_softmax, 1, dim=1)
-                m_net_input = torch.cat((img, trimap_softmax), 1).to(device)
-                alpha_r = model.m_net(m_net_input)
-                alpha_p = fg_gt + unsure_gt * alpha_r
-                loss, L_alpha, L_composition, L_cross, L2_cross, IOU_t, IOU_alpha = loss_function(args,
-                                                                            img, 
-                                                                            trimap_gt,
-                                                                            trimap_gt, 
-                                                                            alpha_p,
-                                                                            alpha_gt)
-                print('loss: %.5f\tL_composision: %.5f\tL_alpha: %.5f'%(loss.item(), L_composition.item(), L_alpha.item()))
+            matting_replica, probs = model(img_in)
+            loss_encoder = L2_criterion(matting_replica, matting)
+            loss_discrim = CE_criterion()
 
-            optimizer.zero_grad()
+            optimizer_encoder.zero_grad()
             loss.backward()
             optimizer.step()
 
