@@ -213,7 +213,10 @@ def main(args):
         
 
 if __name__ == '__main__':
-    #main(args)
-    img = cv2.imread(args.data, -1)
-    alpha = predict(img)
-    cv2.imwrite('test.png', alpha*255.)
+    main(args)
+    '''
+    for file in os.listdir(args.data):
+        img = cv2.imread(os.path.join(args.data, file), -1)
+        alpha = predict(img)
+        cv2.imwrite(os.path.join(args.save_dir, file), alpha*255.)
+    '''
