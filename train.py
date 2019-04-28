@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.utils as vutils
 from torch.utils.data import DataLoader
+from operator import add
 import time
 import os
 from data import dataset
@@ -189,7 +190,7 @@ class Train_Log():
     def save_log(self, log):
         self.logFile.write(log + '\n')
 
-
+alpha_iou_threshold = [0.1, 0.3, 0.5, 0.7, 0.9]
 def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
 
     criterion = nn.CrossEntropyLoss()
@@ -218,7 +219,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     # ------------------------
     # l_alpha
     L_alpha = L1(alpha_pre, alpha_gt)
-    IOU_alpha = utils.iou_pytorch(alpha_pre>1e-5, alpha_gt>1e-5)
+    IOU_alpha = [utils.iou_pytorch(alpha_pre>thr, alpha_gt>thr) for thr in alpha_iou_threshold]
 
     # L_composition
     fg = torch.cat((alpha_gt, alpha_gt, alpha_gt), 1) * img
@@ -301,7 +302,7 @@ def main():
         L_cross_, L2_bg_ = 0, 0
         loss_array = []
         IOU_t_bg_, IOU_t_unsure_, IOU_t_fg_ = 0, 0, 0
-        IOU_alpha_ = 0
+        IOU_alpha_ = [0] * 5
         if args.lrdecayType != 'keep':
             lr = set_lr(args, epoch, optimizer)
 
@@ -350,7 +351,7 @@ def main():
             IOU_t_bg_ += IOU_t[0].item()
             IOU_t_unsure_ += IOU_t[1].item()
             IOU_t_fg_ += IOU_t[2].item()
-            IOU_alpha_ += IOU_alpha.item()
+            IOU_alpha_ = list(map(add, IOU_alpha_, IOU_alpha.tolist()))
             loss_array.append(loss.item())
             
             # TENSORBOARD SCALARS
@@ -411,8 +412,10 @@ def main():
             trainlog.add_scalar('avg_IOU_t_fg', IOU_t_fg_, epoch)
             trainlog.add_scalar('avg_L_alpha', L_alpha_, epoch)
             trainlog.add_scalar('avg_L_composition', L_composition_, epoch)
+            for j in range(len(alpha_iou_threshold)):
+                trainlog.add_scalar('avg_iou_alpha_'+str(alpha_iou_threshold[j]), IOU_alpha_[j], epoch)
 
-            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t_bg: {:.5f}\tIOU_t_unsure: {:.5f}\tIOU_t_fg: {:.5f}\tIOU_alpha: {:.5f}\t" \
+            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t_bg: {:.5f}\tIOU_t_unsure: {:.5f}\tIOU_t_fg: {:.5f}\tIOU_alpha_mean: {:.5f}\t" \
                      .format(epoch, args.nEpochs, 
                             lr, 
                             loss_, 
@@ -422,7 +425,7 @@ def main():
                             IOU_t_bg_,
                             IOU_t_unsure_,
                             IOU_t_fg_,
-                            IOU_alpha_)
+                            IOU_alpha_.mean())
             print(log)
             trainlog.save_log(log)
             trainlog.save_model(model, epoch)
