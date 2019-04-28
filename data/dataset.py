@@ -7,6 +7,8 @@ import cv2
 import os
 import random as r
 import numpy as np
+import imutils
+import scipy.stats
 
 import torch
 import torch.nn as nn
@@ -78,9 +80,12 @@ class human_matting_data(data.Dataset):
     human_matting
     """
 
-    def __init__(self, root_dir, imglist, patch_size):
+    def __init__(self, root_dir, imglist, patch_size, rotate=None):
         super().__init__()
         self.data_root = root_dir
+        self.rotate = rotate
+        if rotate:
+            self.rotate = abs(self.rotate)
 
         self.patch_size = patch_size
         '''
@@ -111,12 +116,6 @@ class human_matting_data(data.Dataset):
                 assert image.shape[1] == alpha.shape[1]
             else:
                 print(self.imgID[index], ' NEEDS TO BE ELIMINATED')
-        '''
-        assert image.shape[0] == trimap.shape[0]
-        assert image.shape[1] == trimap.shape[1]
-        assert image.shape[0] == alpha.shape[0]
-        assert image.shape[1] == alpha.shape[1]
-        '''
         if 0 in list(image.shape):
             print(image.shape)
             print(self.imgID[index], ' Image is None')
@@ -141,6 +140,12 @@ class human_matting_data(data.Dataset):
         # normalize
         image = (image.astype(np.float32)  - (114., 121., 134.,)) / 255.0
         alpha = alpha.astype(np.float32) / 255.0
+        # rotate angle sampled from truncated normal distribution
+        if self.rotate:
+            rot_angle = scipy.stats.truncnorm.rvs(-self.rotate, self.rotate, 0, 3)
+            image = imutils.rotate(image, rot_angle)
+            alpha = imutils.rotate(alpha, rot_angle)
+            trimap = imutils.rotate(trimap, rot_angle)
         # to tensor
         image = np2Tensor(image)
         trimap = np2Tensor(trimap)
