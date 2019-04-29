@@ -96,6 +96,7 @@ class human_matting_data(data.Dataset):
 
     def __getitem__(self, index):
         # read files
+        anomaly = torch.Tensor([1]) if 'anomaly' in self.imgID[index] else torch.Tensor([0])
         image, trimap, alpha = read_files(self.data_root, 
                                           file_name={'image': self.imgID[index].strip()[:-4]+'.jpg',
                                                      'trimap': self.imgID[index],
@@ -149,7 +150,7 @@ class human_matting_data(data.Dataset):
         trimap = trimap[0,:,:].unsqueeze_(0)
         alpha = alpha[-1,:,:].unsqueeze_(0)
 
-        sample = {'image': image, 'trimap': trimap, 'alpha': alpha}
+        sample = {'image': image, 'trimap': trimap, 'alpha': alpha, 'anomaly': anomaly}
 
         return sample
 

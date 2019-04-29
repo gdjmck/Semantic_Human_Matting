@@ -226,7 +226,7 @@ def main():
     lr = args.lr
     
     L2_criterion = nn.MSELoss()
-    CE_criterion = nn.CrossEntropyLoss()
+    BCE_criterion = nn.BCELoss()
     optimizer_encoder = optim.Adam(filter(lambda p: p.requires_grad, list(model.encoder.parameters())+list(model.decoder.parameters())), \
                                    lr=lr, betas=(0.9, 0.999), 
                                    weight_decay=0.0005)
@@ -253,103 +253,26 @@ def main():
         t0 = time.time()
         for i, sample_batched in enumerate(trainloader):
             print('batch ', i)
-            img, trimap_gt, alpha_gt = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha']
+            img, trimap_gt, alpha_gt, label = sample_batched['image'], sample_batched['trimap'], sample_batched['alpha'], sample_batched['anomaly']
             img_in = torch.cat((img, alpha_gt), 1)
             matting = alpha_gt.repeat(1, 3, 1, 1) * img_in
-            img_in, matting = img_in.to(device), matting.to(device)
+            img_in, matting, label = img_in.to(device), matting.to(device), label.to(device)
 
-            matting_replica, probs = model(img_in)
+            # update auto encoder
+            matting_replica, _ = model(img_in)
             loss_encoder = L2_criterion(matting_replica, matting)
-            loss_discrim = CE_criterion()
-
+            
             optimizer_encoder.zero_grad()
-            loss.backward()
-            optimizer.step()
+            loss_encoder.backward()
+            optimizer_encoder.step()
 
-            loss_ += loss.item()
-            L_alpha_ += L_alpha.item()
-            L_composition_ += L_composition.item()
-            L_cross_ += L_cross.item()
-            L2_bg_ += L2_cross.item()
-            IOU_t_bg_ += IOU_t[0].item()
-            IOU_t_unsure_ += IOU_t[1].item()
-            IOU_t_fg_ += IOU_t[2].item()
-            IOU_alpha_ += IOU_alpha.item()
-            loss_array.append(loss.item())
-            
-            # TENSORBOARD SCALARS
-            trainlog.add_scalar('loss', loss.item())
-            trainlog.add_scalar('T_net_loss', L_cross.item())
-            trainlog.add_scalar('T_net_bg_L2', L2_cross.item())
-            trainlog.add_scalar('M_net_alpha', L_alpha.item())
-            trainlog.add_scalar('M_net_composition', L_composition.item())
-            trainlog.add_scalar('IOU_t_bg', IOU_t[0].item())
-            trainlog.add_scalar('IOU_t_unsure', IOU_t[1].item())
-            trainlog.add_scalar('IOU_t_fg', IOU_t[2].item())
-            if (i+1) % 100 == 0:
-                for var_name, value in target_network.named_parameters():
-                    # ignore unused parameters
-                    if not hasattr(value.grad, 'data'):
-                        continue
-                    var_name = var_name.replace('.', '/')
-                    trainlog.add_histogram(var_name, value.data.cpu().numpy())
-                    trainlog.add_histogram(var_name+'/grad', value.grad.data.cpu().numpy())
+            # update discriminator
+            _, probs = model(img_in)
+            loss_discrim = BCE_criterion(probs, label)
 
-            # TENSORBOARD IMAGE
-            if (i+1) % 1000 == 0 and args.train_phase == 'pre_train_m_net':
-                trainlog.add_image('fg_gt', vutils.make_grid(fg_gt, normalize=True, nrow=4))
-                trainlog.add_image('unsure_gt', vutils.make_grid(unsure_gt, normalize=True, nrow=4))
-                trainlog.add_image('alpha_p', vutils.make_grid(alpha_p, normalize=True, nrow=4))
-                trainlog.add_image('alpha_r', vutils.make_grid(alpha_r, normalize=True, nrow=4))
-                trainlog.add_image('alpha_gt', vutils.make_grid(alpha_gt, normalize=True, nrow=4))
-            if (i+1) % 1000 == 0 and args.train_phase != 'pre_train_m_net':
-                trainlog.add_trimap(trimap_pre)
-                trainlog.add_trimap_gt(trimap_gt)
-                trainlog.add_image('origin_image', vutils.make_grid(img, normalize=True, nrow=4))
-            
-            trainlog.step()
-
-        print('Done iterating all training data')
-        t1 = time.time()
-
-        if epoch % args.save_epoch == 0:
-
-            # speed = (t1 - t0) / 60 
-
-            loss_ = loss_ / (i+1)
-            L_alpha_ = L_alpha_ / (i+1)
-            L_composition_ = L_composition_ / (i+1)
-            L_cross_ = L_cross_ / (i+1)
-            L2_bg_ = L2_bg_ / (i+1)
-            loss_var = np.var(loss_array)
-            IOU_t_bg_ = IOU_t_bg_ / (i+1)
-            IOU_t_unsure_ = IOU_t_unsure_ / (i+1)
-            IOU_t_fg_ = IOU_t_fg_ / (i+1)
-            IOU_alpha_ = IOU_alpha_ / (i+1)
-            trainlog.add_scalar('avg_loss', loss_, epoch)
-            trainlog.add_scalar('avg_t_loss', L_cross_, epoch)
-            trainlog.add_scalar('avg_t_L2_bg', L2_bg_, epoch)
-            trainlog.add_scalar('avg_t_loss_var', loss_var, epoch)
-            trainlog.add_scalar('avg_IOU_t_bg', IOU_t_bg_, epoch)
-            trainlog.add_scalar('avg_IOU_t_unsure', IOU_t_unsure_, epoch)
-            trainlog.add_scalar('avg_IOU_t_fg', IOU_t_fg_, epoch)
-            trainlog.add_scalar('avg_L_alpha', L_alpha_, epoch)
-            trainlog.add_scalar('avg_L_composition', L_composition_, epoch)
-
-            log = "[{} / {}] \tLr: {:.5f}\nloss: {:.5f}\tloss_p: {:.5f}\tloss_t: {:.5f}\tloss_var: {:.5f}\tIOU_t_bg: {:.5f}\tIOU_t_unsure: {:.5f}\tIOU_t_fg: {:.5f}\tIOU_alpha: {:.5f}\t" \
-                     .format(epoch, args.nEpochs, 
-                            lr, 
-                            loss_, 
-                            L_alpha_+L_composition_, 
-                            L_cross_,
-                            loss_var,
-                            IOU_t_bg_,
-                            IOU_t_unsure_,
-                            IOU_t_fg_,
-                            IOU_alpha_)
-            print(log)
-            trainlog.save_log(log)
-            trainlog.save_model(model, epoch)
+            optimizer_discriminator.zero_grad()
+            loss_discrim.backward()
+            optimizer_discriminator.step()
 
 
 if __name__ == "__main__":
