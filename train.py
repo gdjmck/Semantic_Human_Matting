@@ -219,7 +219,7 @@ def loss_function(args, img, trimap_pre, trimap_gt, alpha_pre, alpha_gt):
     # ------------------------
     # l_alpha
     L_alpha = L1(alpha_pre, alpha_gt)
-    IOU_alpha = [utils.iou_pytorch(alpha_pre>thr, alpha_gt>thr) for thr in alpha_iou_threshold]
+    IOU_alpha = [utils.iou_pytorch(alpha_pre>thr, alpha_gt>thr).item() for thr in alpha_iou_threshold]
 
     # L_composition
     fg = torch.cat((alpha_gt, alpha_gt, alpha_gt), 1) * img
