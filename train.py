@@ -257,7 +257,7 @@ def main():
             print('batch ', i)
             img, alpha_gt, label = sample_batched['image'], sample_batched['alpha'], sample_batched['anomaly']
             img_in = torch.cat((img, alpha_gt), 1)
-            matting = alpha_gt.repeat(1, 3, 1, 1) * img_in
+            matting = alpha_gt.repeat(1, 3, 1, 1) * img
             img_in, matting, label = img_in.to(device), matting.to(device), label.to(device)
 
             # update auto encoder
