@@ -95,7 +95,8 @@ class human_matting_data(data.Dataset):
         self.patch_size = patch_size
         with open(anomalist, 'rb') as f:
             self.anomalist = pickle.load(f)
-        self.imgID = os.listdir(os.path.join(root_dir, 'trimap'))
+        self.imgID = os.listdir(os.path.join(root_dir, 'alpha'))
+        print('number of anonymous: ', len(self.anomalist), '\t', len(self.anomalist)/len(self.imgID))
         self.num = len(self.imgID)
         print("Dataset : file number %d"% self.num)
 

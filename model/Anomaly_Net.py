@@ -165,7 +165,7 @@ class Discriminator(nn.Module):
         x = self.squeeze_3(x)
 
         # flatten
-        x = x.view(-1)
+        x = torch.flatten(x, start_dim=1)
 
         probs = self.classify(x)
 
