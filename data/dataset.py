@@ -76,6 +76,8 @@ def random_flip(image, trimap, alpha):
     return image, trimap, alpha
        
 def np2Tensor(array):
+    if len(array.shape) == 2:
+        array = np.expand_dims(array, -1)
     ts = (2, 0, 1)
     tmp = array.copy()
     tensor = torch.FloatTensor(tmp.transpose(ts).astype(float))    
@@ -104,6 +106,8 @@ class human_matting_data(data.Dataset):
         image, alpha = read_files(self.data_root, 
                                           file_name={'image': self.imgID[index].strip()[:-4]+'.jpg',
                                                      'alpha': self.imgID[index]})
+        if alpha.shape[-1] == 4:
+            alpha = alpha[..., -1:]
         if image.shape[0] != alpha.shape[0]:
             image_ratio = image.shape[0] / image.shape[1]
             alpha_ratio = alpha.shape[0] / alpha.shape[1]
@@ -127,7 +131,6 @@ class human_matting_data(data.Dataset):
         # normalize
         image = (image.astype(np.float32)  - (114., 121., 134.,)) / 255.0
         alpha = alpha.astype(np.float32) / 255.0
-        print('image.shape', image.shape, ' alpha.shape:', alpha.shape)
         # to tensor
         image = np2Tensor(image)
         alpha = np2Tensor(alpha)

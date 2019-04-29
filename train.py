@@ -232,7 +232,7 @@ def main():
     optimizer_encoder = optim.Adam(filter(lambda p: p.requires_grad, list(model.encoder.parameters())+list(model.decoder.parameters())), \
                                    lr=lr, betas=(0.9, 0.999), 
                                    weight_decay=0.0005)
-    optimizer_discriminator = optim.Adam(filter(lambda p: p.requires_grad, model.classifier),
+    optimizer_discriminator = optim.Adam(filter(lambda p: p.requires_grad, model.classifier.parameters()),
                                     lr=lr, betas=(0.9, 0.999),
                                     weight_decay=0.0005)
 
