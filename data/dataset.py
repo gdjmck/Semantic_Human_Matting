@@ -7,6 +7,7 @@ import cv2
 import os
 import random as r
 import numpy as np
+import pickle
 
 import torch
 import torch.nn as nn
@@ -78,15 +79,13 @@ class human_matting_data(data.Dataset):
     human_matting
     """
 
-    def __init__(self, root_dir, imglist, patch_size):
+    def __init__(self, root_dir, imglist, patch_size, anomalist='anonymous.pkl'):
         super().__init__()
         self.data_root = root_dir
 
         self.patch_size = patch_size
-        '''
-        with open(imglist) as f:
-            self.imgID = f.readlines()
-        '''
+        with open(anomalist, 'rb') as f:
+            self.anomalist = pickle.load(f)
         self.imgID = os.listdir(os.path.join(root_dir, 'trimap'))
         self.num = len(self.imgID)
         print("Dataset : file number %d"% self.num)
@@ -96,7 +95,7 @@ class human_matting_data(data.Dataset):
 
     def __getitem__(self, index):
         # read files
-        anomaly = torch.Tensor([1]) if 'anomaly' in self.imgID[index] else torch.Tensor([0])
+        anomaly = torch.Tensor([1]) if self.imgID[index] in self.anomalist else torch.Tensor([0])
         image, trimap, alpha = read_files(self.data_root, 
                                           file_name={'image': self.imgID[index].strip()[:-4]+'.jpg',
                                                      'trimap': self.imgID[index],
