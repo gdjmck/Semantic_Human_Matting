@@ -351,7 +351,7 @@ def main():
             IOU_t_bg_ += IOU_t[0].item()
             IOU_t_unsure_ += IOU_t[1].item()
             IOU_t_fg_ += IOU_t[2].item()
-            IOU_alpha_ = list(map(add, IOU_alpha_, IOU_alpha.tolist()))
+            IOU_alpha_ = list(map(add, IOU_alpha_, IOU_alpha))
             loss_array.append(loss.item())
             
             # TENSORBOARD SCALARS
