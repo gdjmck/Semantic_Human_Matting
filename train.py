@@ -28,6 +28,7 @@ def get_args():
     parser.add_argument('--saveDir', default='./ckpt', help='model save dir')
     parser.add_argument('--trainData', default='human_matting_data', help='train dataset name')
     parser.add_argument('--trainList', default='./data/list.txt', help='train img ID')
+    parser.add_argument('--anomalist', default='./segments/anonymous.pkl', help='anonymous list file')
     parser.add_argument('--load', default= 'human_matting', help='save model')
 
     parser.add_argument('--finetuning', action='store_true', default=False, help='finetuning the training')
@@ -212,7 +213,8 @@ def main():
     print("============> Loading datasets ...")
     train_data = getattr(dataset, args.trainData)(root_dir = args.dataDir, \
                                                   imglist = args.trainList, \
-                                                  patch_size = args.patch_size)
+                                                  patch_size = args.patch_size,
+                                                  anomalist = args.anomalist)
     trainloader = DataLoader(train_data, 
                              batch_size=args.train_batch, 
                              drop_last=True, 

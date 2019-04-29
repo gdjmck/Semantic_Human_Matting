@@ -67,10 +67,10 @@ def load_model(args, model):
     
     return model
 
-
+'''
 model = network.net()
 model = load_model(args, model)
-
+'''
 def prepare_image(img, patchsize=256):
     # short side to patchsize
     h, w = img.shape[0], img.shape[1]
@@ -213,7 +213,11 @@ def main(args):
         
 
 if __name__ == '__main__':
-    #main(args)
-    img = cv2.imread(args.data, -1)
-    alpha = predict(img)
-    cv2.imwrite('test.png', alpha*255.)
+    from data import dataset
+    td = dataset.human_matting_data(root_dir='./segments/bgremove', imglist=None, 
+                                patch_size=256, anomalist='./segments/anonymous.pkl')
+    gen = iter(td)
+    sample = next(gen)
+    print(sample['anomaly'])
+    print(sample['image'].shape, sample['alpha'].shape)
+    print(sample.keys())

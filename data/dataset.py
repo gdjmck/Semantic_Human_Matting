@@ -17,16 +17,12 @@ import torch.utils.data as data
 def read_files(data_dir, file_name={}):
 
     image_name = os.path.join(data_dir, 'image', file_name['image'])
-    trimap_name = os.path.join(data_dir, 'trimap', file_name['trimap'])
     alpha_name = os.path.join(data_dir, 'alpha', file_name['alpha'])
 
     image = cv2.imread(image_name, -1)
-    trimap = cv2.imread(trimap_name, -1)
     alpha = cv2.imread(alpha_name, -1)
-    if (image is None) or (trimap is None) or (alpha is None):
-        print(image_name, ' missing')
 
-    return image, trimap, alpha
+    return image, alpha
 
 
 def random_scale_and_creat_patch(image, trimap, alpha, patch_size):
@@ -53,6 +49,17 @@ def random_scale_and_creat_patch(image, trimap, alpha, patch_size):
         print('create patch makes Null image')
 
     return image, trimap, alpha
+
+
+def border_fillin(img):
+    h, w = img.shape[:2]
+    pad_len = abs(h-w)
+    if pad_len == 0:
+        return img
+    elif h > w:
+        return cv2.copyMakeBorder(img, 0, 0, int(pad_len/2.), pad_len-int(pad_len/2.), borderType=cv2.BORDER_CONSTANT, value=0)
+    else:
+        return cv2.copyMakeBorder(img, int(pad_len/2.), pad_len-int(pad_len/2.), 0, 0, borderType=cv2.BORDER_CONSTANT, value=0)
 
 
 def random_flip(image, trimap, alpha):
@@ -91,17 +98,12 @@ class human_matting_data(data.Dataset):
         print("Dataset : file number %d"% self.num)
 
 
-
-
     def __getitem__(self, index):
         # read files
         anomaly = torch.Tensor([1]) if self.imgID[index] in self.anomalist else torch.Tensor([0])
-        image, trimap, alpha = read_files(self.data_root, 
+        image, alpha = read_files(self.data_root, 
                                           file_name={'image': self.imgID[index].strip()[:-4]+'.jpg',
-                                                     'trimap': self.imgID[index],
                                                      'alpha': self.imgID[index]})
-        assert alpha.shape[0] == trimap.shape[0]
-        assert alpha.shape[1] == trimap.shape[1]
         if image.shape[0] != alpha.shape[0]:
             image_ratio = image.shape[0] / image.shape[1]
             alpha_ratio = alpha.shape[0] / alpha.shape[1]
@@ -111,45 +113,28 @@ class human_matting_data(data.Dataset):
                 assert image.shape[1] == alpha.shape[1]
             else:
                 print(self.imgID[index], ' NEEDS TO BE ELIMINATED')
-        '''
-        assert image.shape[0] == trimap.shape[0]
-        assert image.shape[1] == trimap.shape[1]
-        assert image.shape[0] == alpha.shape[0]
-        assert image.shape[1] == alpha.shape[1]
-        '''
         if 0 in list(image.shape):
             print(image.shape)
             print(self.imgID[index], ' Image is None')
-        if 0 in list(trimap.shape):
-            print(trimap.shape)
-            print(self.imgID[index], ' trimap is None')
         if 0 in list(alpha.shape):
             print(alpha.shape)
             print(self.imgID[index], ' alpha is None')
-        # NOTE ! ! !
-        # trimap should be 3 classes : fg, bg. unsure
-        trimap[trimap==0] = 0
-        trimap[trimap==128] = 1
-        trimap[trimap==255] = 2
 
-        # augmentation
-        image, trimap, alpha = random_scale_and_creat_patch(image, trimap, alpha, self.patch_size)
-        image, trimap, alpha = random_flip(image, trimap, alpha)
-        trimap = np.expand_dims(trimap, -1)
-
-
+        image = border_fillin(image)
+        image = cv2.resize(image, (self.patch_size, self.patch_size), interpolation=cv2.INTER_CUBIC)
+        alpha = border_fillin(alpha)
+        alpha = cv2.resize(alpha, (self.patch_size, self.patch_size), interpolation=cv2.INTER_CUBIC)
         # normalize
         image = (image.astype(np.float32)  - (114., 121., 134.,)) / 255.0
         alpha = alpha.astype(np.float32) / 255.0
+        print('image.shape', image.shape, ' alpha.shape:', alpha.shape)
         # to tensor
         image = np2Tensor(image)
-        trimap = np2Tensor(trimap)
         alpha = np2Tensor(alpha)
 
-        trimap = trimap[0,:,:].unsqueeze_(0)
         alpha = alpha[-1,:,:].unsqueeze_(0)
 
-        sample = {'image': image, 'trimap': trimap, 'alpha': alpha, 'anomaly': anomaly}
+        sample = {'image': image, 'alpha': alpha, 'anomaly': anomaly}
 
         return sample
 
