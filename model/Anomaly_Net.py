@@ -4,14 +4,15 @@ import torch.nn as nn
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.en_conv_bn_relu_1 = nn.Sequential(nn.Conv2d(4, 64, 2, 1, 1, bias=True),
+        self.en_conv_bn_relu_1 = nn.Sequential(nn.Conv2d(4, 64, 3, 2, 1, bias=True),
                                        nn.BatchNorm2d(64),
                                        nn.ReLU())
 
         # 1/2
         self.en_conv_bn_relu_2 = nn.Sequential(nn.Conv2d(64, 128, 3, 1, 1, bias=True),
                                        nn.BatchNorm2d(128),
-                                       nn.ReLU()) 
+                                       nn.ReLU())
+        self.max_pooling_2 = nn.MaxPool2d(kernel_size=2, stride=2) 
 
         # 1/4
         self.en_conv_bn_relu_3 = nn.Sequential(nn.Conv2d(128, 256, 3, 1, 1, bias=True),
