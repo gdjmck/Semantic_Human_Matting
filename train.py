@@ -244,17 +244,10 @@ def main():
 
     for epoch in range(start_epoch, args.nEpochs+1):
 
-        loss_ = 0
-        L_alpha_ = 0
-        L_composition_ = 0
-        L_cross_, L2_bg_ = 0, 0
-        loss_array = []
-        IOU_t_bg_, IOU_t_unsure_, IOU_t_fg_ = 0, 0, 0
-        IOU_alpha_ = 0
+        loss_recon_, loss_discrim_ = 0., 0.
 
         t0 = time.time()
         for i, sample_batched in enumerate(trainloader):
-            print('batch ', i)
             img, alpha_gt, label = sample_batched['image'], sample_batched['alpha'], sample_batched['anomaly']
             img_in = torch.cat((img, alpha_gt), 1)
             matting = alpha_gt.repeat(1, 3, 1, 1) * img
@@ -263,6 +256,9 @@ def main():
             # update auto encoder
             matting_replica, _ = model(img_in)
             loss_encoder = L2_criterion(matting_replica, matting)
+            loss_encoder_value = loss_encoder.item()
+            trainlog.add_scalar('loss_recon', loss_encoder_value)
+            loss_recon_ += loss_encoder_value
             
             optimizer_encoder.zero_grad()
             loss_encoder.backward()
@@ -271,10 +267,23 @@ def main():
             # update discriminator
             _, probs = model(img_in)
             loss_discrim = BCE_criterion(probs, label)
+            loss_discrim_value = loss_discrim.item()
+            trainlog.add_scalar('loss_discrim', loss_discrim_value)
+            loss_discrim_ += loss_discrim_value
 
             optimizer_discriminator.zero_grad()
             loss_discrim.backward()
             optimizer_discriminator.step()
+
+            print('batch ', i, '\tloss_encoder:%.3f\tloss_discrim:%.3f'%(loss_encoder_value, loss_discrim_value))
+            # 记录一张重构图片
+            if i % 100 == 0:
+                trainlog.add_image('recon_image', vutils.make_grid(matting_replica*255.+(114, 121, 134), nrow=4))
+
+            trainlog.step()
+
+        print('Epoch %d\t avg_recon_loss: %.3f\t avg_discrim_loss: %.3f'
+            %(epoch, loss_recon_/(1+i), loss_discrim_/(1+i)))
 
 
 if __name__ == "__main__":
