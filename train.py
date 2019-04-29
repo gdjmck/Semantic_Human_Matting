@@ -278,7 +278,7 @@ def main():
             print('batch ', i, '\tloss_encoder:%.3f\tloss_discrim:%.3f'%(loss_encoder_value, loss_discrim_value))
             # 记录一张重构图片
             if i % 100 == 0:
-                trainlog.add_image('recon_image', vutils.make_grid(matting_replica*255.+(114, 121, 134), nrow=4))
+                trainlog.add_image('recon_image', vutils.make_grid(matting_replica*255.+torch.Tensor((114, 121, 134)).view((-1, 1, 1)), nrow=4))
 
             trainlog.step()
 
